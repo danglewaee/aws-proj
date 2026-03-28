@@ -1,29 +1,29 @@
 import json
 
-from shared.config import raw_payload_bucket_name, webhook_events_table_name
+from shared.config import alert_archive_bucket_name, spend_cases_table_name
 from shared.dynamo import deserialize_item, table_resource
 from shared.http import not_found, json_response
 from shared.storage import s3_client
 
 
 def lambda_handler(event, context):
-    event_id = (event.get("pathParameters") or {}).get("eventId")
-    if not event_id:
-        return not_found("Event id was not provided.")
+    case_id = (event.get("pathParameters") or {}).get("caseId")
+    if not case_id:
+        return not_found("Case id was not provided.")
 
-    table = table_resource(webhook_events_table_name())
-    response = table.get_item(Key={"eventId": event_id})
+    table = table_resource(spend_cases_table_name())
+    response = table.get_item(Key={"caseId": case_id})
     item = response.get("Item")
     if not item:
-        return not_found(f"Event {event_id} was not found.")
+        return not_found(f"Case {case_id} was not found.")
 
-    event_summary = deserialize_item(item)
-    payload_key = event_summary.get("payloadS3Key")
+    case_summary = deserialize_item(item)
+    payload_key = case_summary.get("payloadS3Key")
 
     payload_body = None
     if payload_key:
         payload_response = s3_client.get_object(
-            Bucket=raw_payload_bucket_name(),
+            Bucket=alert_archive_bucket_name(),
             Key=payload_key,
         )
         payload_body = payload_response["Body"].read().decode("utf-8")
@@ -36,7 +36,7 @@ def lambda_handler(event, context):
     return json_response(
         200,
         {
-            "event": event_summary,
+            "case": case_summary,
             "payload": parsed_payload,
         },
     )

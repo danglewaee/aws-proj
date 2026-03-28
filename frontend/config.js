@@ -1,3 +1,3 @@
-window.WEBHOOK_CONSOLE_CONFIG = {
+window.SPEND_INBOX_CONFIG = {
     apiBaseUrl: ""
 };

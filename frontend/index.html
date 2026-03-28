@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webhook Replay Console</title>
+    <title>AWS Spend Inbox</title>
     <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -11,10 +11,10 @@
     <header class="hero">
         <div>
             <p class="eyebrow">AWS-first internal tool</p>
-            <h1>Webhook Replay Console</h1>
+            <h1>AWS Spend Inbox</h1>
             <p class="hero-copy">
-                Inspect failed webhook events, read archived payloads, and trigger controlled replay
-                without leaving one operator surface.
+                When the AWS bill jumps, this console turns alerts into review cases that one engineer
+                can inspect, acknowledge, and close without digging through five dashboards.
             </p>
         </div>
         <div class="hero-card">
@@ -22,8 +22,8 @@
             <input id="apiBaseUrl" type="text" placeholder="https://your-api.execute-api.us-east-1.amazonaws.com">
             <div class="hero-actions">
                 <button id="saveBaseUrl">Save URL</button>
-                <button id="refreshEvents" class="secondary">Refresh events</button>
-                <button id="ingestSample" class="secondary">Send sample event</button>
+                <button id="refreshCases" class="secondary">Refresh cases</button>
+                <button id="ingestSample" class="secondary">Send sample alert</button>
             </div>
         </div>
     </header>
@@ -33,19 +33,21 @@
             <div class="panel-header">
                 <div>
                     <p class="section-label">Queue</p>
-                    <h2>Events</h2>
+                    <h2>Cases</h2>
                 </div>
-                <span class="pill" id="eventCount">0 loaded</span>
+                <span class="pill" id="caseCount">0 loaded</span>
             </div>
 
             <div class="filters">
-                <input id="statusFilter" type="text" placeholder="status: FAILED">
-                <input id="sourceFilter" type="text" placeholder="source: shopify">
+                <input id="statusFilter" type="text" placeholder="status: NEW">
+                <input id="sourceFilter" type="text" placeholder="source: anomaly-detection">
+                <input id="serviceFilter" type="text" placeholder="service: Amazon EC2">
+                <input id="severityFilter" type="text" placeholder="severity: HIGH">
                 <button id="applyFilters" class="secondary">Apply filters</button>
             </div>
 
-            <div class="event-list" id="eventList">
-                <p class="empty">No events loaded yet.</p>
+            <div class="event-list" id="caseList">
+                <p class="empty">No cost review cases loaded yet.</p>
             </div>
         </section>
 
@@ -53,37 +55,59 @@
             <div class="panel-header">
                 <div>
                     <p class="section-label">Detail</p>
-                    <h2>Selected event</h2>
+                    <h2>Selected case</h2>
                 </div>
                 <span class="pill" id="detailStatus">None</span>
             </div>
 
             <div class="detail-grid">
                 <article class="detail-card">
-                    <span class="detail-label">Event ID</span>
-                    <strong id="detailEventId">Select an event</strong>
+                    <span class="detail-label">Case ID</span>
+                    <strong id="detailCaseId">Select a case</strong>
                 </article>
                 <article class="detail-card">
                     <span class="detail-label">Source</span>
                     <strong id="detailSource">-</strong>
                 </article>
                 <article class="detail-card">
-                    <span class="detail-label">Type</span>
-                    <strong id="detailType">-</strong>
+                    <span class="detail-label">Service</span>
+                    <strong id="detailService">-</strong>
                 </article>
                 <article class="detail-card">
-                    <span class="detail-label">Replay count</span>
-                    <strong id="detailReplayCount">0</strong>
+                    <span class="detail-label">Severity</span>
+                    <strong id="detailSeverity">-</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Estimated impact</span>
+                    <strong id="detailImpact">-</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Owner</span>
+                    <strong id="detailOwner">-</strong>
                 </article>
             </div>
 
-            <label for="replayReason">Replay reason</label>
-            <input id="replayReason" type="text" placeholder="Manual verification after downstream fix">
-            <button id="replayEvent">Replay selected event</button>
+            <div class="detail-grid">
+                <article class="detail-card">
+                    <span class="detail-label">Likely cause</span>
+                    <strong id="detailLikelyCause">-</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Suggested action</span>
+                    <strong id="detailSuggestedAction">-</strong>
+                </article>
+            </div>
+
+            <label for="reviewNote">Review note</label>
+            <input id="reviewNote" type="text" placeholder="Checked EC2 instances launched after the anomaly window">
+            <div class="hero-actions">
+                <button id="acknowledgeCase">Acknowledge selected case</button>
+                <button id="resolveCase" class="secondary">Resolve selected case</button>
+            </div>
 
             <div class="payload-panel">
-                <p class="section-label">Payload</p>
-                <pre id="payloadView">Select an event to inspect its payload.</pre>
+                <p class="section-label">Raw alert</p>
+                <pre id="payloadView">Select a case to inspect the alert payload.</pre>
             </div>
         </section>
     </main>

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: AWS-first Webhook Replay Console
+Description: AWS-first Spend Inbox
 
 Globals:
   Function:
@@ -10,8 +10,8 @@ Globals:
     Tracing: Active
     Environment:
       Variables:
-        WEBHOOK_EVENTS_TABLE: !Ref WebhookEventsTable
-        RAW_PAYLOAD_BUCKET: !Ref RawPayloadBucket
+        SPEND_CASES_TABLE: !Ref WebhookEventsTable
+        ALERT_ARCHIVE_BUCKET: !Ref RawPayloadBucket
         STATUS_INDEX_NAME: status-receivedAt-index
 
 Resources:
@@ -41,14 +41,14 @@ Resources:
     Properties:
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
-        - AttributeName: eventId
+        - AttributeName: caseId
           AttributeType: S
         - AttributeName: status
           AttributeType: S
         - AttributeName: receivedAt
           AttributeType: S
       KeySchema:
-        - AttributeName: eventId
+        - AttributeName: caseId
           KeyType: HASH
       GlobalSecondaryIndexes:
         - IndexName: status-receivedAt-index
@@ -76,7 +76,7 @@ Resources:
           Properties:
             ApiId: !Ref WebhookApi
             Method: POST
-            Path: /webhooks/{source}
+            Path: /alerts/{source}
 
   ListEventsFunction:
     Type: AWS::Serverless::Function
@@ -92,7 +92,7 @@ Resources:
           Properties:
             ApiId: !Ref WebhookApi
             Method: GET
-            Path: /events
+            Path: /cases
 
   GetEventFunction:
     Type: AWS::Serverless::Function
@@ -110,7 +110,7 @@ Resources:
           Properties:
             ApiId: !Ref WebhookApi
             Method: GET
-            Path: /events/{eventId}
+            Path: /cases/{caseId}
 
   ReplayFunction:
     Type: AWS::Serverless::Function
@@ -128,7 +128,7 @@ Resources:
           Properties:
             ApiId: !Ref WebhookApi
             Method: POST
-            Path: /events/{eventId}/replay
+            Path: /cases/{caseId}/review
 
 Outputs:
   ApiBaseUrl:
@@ -136,9 +136,9 @@ Outputs:
     Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com"
 
   RawPayloadBucketName:
-    Description: Bucket storing archived webhook payloads and replay artifacts.
+    Description: Bucket storing archived spend alerts and review artifacts.
     Value: !Ref RawPayloadBucket
 
-  WebhookEventsTableName:
-    Description: DynamoDB table storing event summaries and replay state.
+  SpendCasesTableName:
+    Description: DynamoDB table storing spend review cases and status changes.
     Value: !Ref WebhookEventsTable

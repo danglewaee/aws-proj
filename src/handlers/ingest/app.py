@@ -3,10 +3,34 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from shared.config import raw_payload_bucket_name, webhook_events_table_name
+from shared.config import alert_archive_bucket_name, spend_cases_table_name
 from shared.dynamo import deserialize_item, table_resource
 from shared.http import bad_request, json_response
 from shared.storage import s3_client
+
+
+ALERT_SOURCE_PROFILES = {
+    "budgets": {
+        "label": "AWS Budgets",
+        "default_title": "Monthly spend crossed a budget threshold",
+        "default_action": "Review the tagged resources behind the budget and stop anything idle first.",
+    },
+    "anomaly-detection": {
+        "label": "Cost Anomaly Detection",
+        "default_title": "Unexpected AWS spend increase detected",
+        "default_action": "Open the suspicious service first and compare yesterday's usage against normal baseline.",
+    },
+    "compute-optimizer": {
+        "label": "Compute Optimizer",
+        "default_title": "Potential savings opportunity detected",
+        "default_action": "Review the recommended downsizing candidates and confirm they are safe to change.",
+    },
+    "manual": {
+        "label": "Manual Review",
+        "default_title": "Spend issue reported manually",
+        "default_action": "Capture the likely cause and assign one owner before the next billing cycle.",
+    },
+}
 
 
 def _read_body(event):
@@ -16,59 +40,96 @@ def _read_body(event):
     return body
 
 
+def _resolve_source_profile(source):
+    normalized = (source or "").strip().lower()
+    return ALERT_SOURCE_PROFILES.get(normalized, ALERT_SOURCE_PROFILES["manual"])
+
+
+def _normalize_severity(raw_value, estimated_impact):
+    if raw_value:
+        normalized = raw_value.strip().upper()
+        if normalized in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+            return normalized
+
+    if estimated_impact >= 500:
+        return "CRITICAL"
+    if estimated_impact >= 200:
+        return "HIGH"
+    if estimated_impact >= 75:
+        return "MEDIUM"
+    return "LOW"
+
+
 def lambda_handler(event, context):
     source = (event.get("pathParameters") or {}).get("source")
     if not source:
-        return bad_request("Missing webhook source path parameter.")
+        return bad_request("Missing alert source path parameter.")
 
     raw_body = _read_body(event)
     if not raw_body:
-        return bad_request("Webhook body must not be empty.")
+        return bad_request("Alert body must not be empty.")
 
     try:
         payload = json.loads(raw_body)
     except json.JSONDecodeError:
-        return bad_request("Webhook body must be valid JSON.")
+        return bad_request("Alert body must be valid JSON.")
 
-    event_id = str(uuid.uuid4())
+    case_id = str(uuid.uuid4())
     received_at = datetime.now(timezone.utc).isoformat()
-    event_type = payload.get("type", "unknown")
+    source_profile = _resolve_source_profile(source)
     correlation_id = (
         payload.get("correlationId")
         or (event.get("headers") or {}).get("x-correlation-id")
-        or event_id
+        or case_id
     )
-    status = "FAILED" if payload.get("simulateFailure") else "PROCESSED"
-    payload_key = f"raw/{source}/{received_at}/{event_id}.json"
+
+    estimated_impact = float(payload.get("estimatedImpactUsd", 0))
+    severity = _normalize_severity(payload.get("severity"), estimated_impact)
+    service = payload.get("service", "Unknown AWS service")
+    title = payload.get("title") or source_profile["default_title"]
+    likely_cause = payload.get("likelyCause", "The source alert did not include a likely cause yet.")
+    suggested_action = payload.get("suggestedAction") or source_profile["default_action"]
+    alert_type = payload.get("alertType", "ANOMALY")
+    resource_hints = payload.get("resourceHints", [])
+    owner = payload.get("owner", "unassigned")
+    payload_key = f"alerts/{source}/{received_at}/{case_id}.json"
 
     s3_client.put_object(
-        Bucket=raw_payload_bucket_name(),
+        Bucket=alert_archive_bucket_name(),
         Key=payload_key,
         Body=raw_body.encode("utf-8"),
         ContentType="application/json",
     )
 
-    table = table_resource(webhook_events_table_name())
+    table = table_resource(spend_cases_table_name())
     item = {
-        "eventId": event_id,
+        "caseId": case_id,
+        "title": title,
         "source": source,
-        "eventType": event_type,
-        "status": status,
+        "sourceLabel": source_profile["label"],
+        "status": "NEW",
+        "service": service,
+        "severity": severity,
+        "alertType": alert_type,
+        "estimatedImpactUsd": estimated_impact,
+        "likelyCause": likely_cause,
+        "suggestedAction": suggested_action,
+        "resourceHints": resource_hints,
+        "owner": owner,
         "receivedAt": received_at,
-        "lastProcessedAt": received_at,
+        "lastUpdatedAt": received_at,
         "correlationId": correlation_id,
         "payloadS3Key": payload_key,
-        "replayCount": 0,
-        "lastReplayReason": None,
-        "lastErrorCode": "SIMULATED_FAILURE" if status == "FAILED" else None,
-        "lastErrorMessage": "Failure requested by payload flag." if status == "FAILED" else None,
+        "reviewCount": 0,
+        "lastReviewNote": None,
+        "lastReviewedAt": None,
     }
     table.put_item(Item=item)
 
     return json_response(
         202,
         {
-            "message": "Webhook accepted.",
-            "event": deserialize_item(item),
+            "message": "Spend alert captured.",
+            "case": deserialize_item(item),
         },
     )

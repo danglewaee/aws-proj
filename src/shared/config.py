@@ -1,12 +1,12 @@
 import os
 
 
-def webhook_events_table_name():
-    return os.environ["WEBHOOK_EVENTS_TABLE"]
+def spend_cases_table_name():
+    return os.environ["SPEND_CASES_TABLE"]
 
 
-def raw_payload_bucket_name():
-    return os.environ["RAW_PAYLOAD_BUCKET"]
+def alert_archive_bucket_name():
+    return os.environ["ALERT_ARCHIVE_BUCKET"]
 
 
 def status_index_name():

@@ -1,53 +1,53 @@
-# Webhook Replay Console
+# AWS Spend Inbox
 
-`Webhook Replay Console` is an AWS-first internal platform for ingesting webhooks, storing payload history, inspecting failures, and manually replaying events with a clean audit trail.
+`AWS Spend Inbox` is an AWS-first internal tool for catching unexpected cost alerts, turning them into review cases, and helping one engineer decide what to inspect first.
 
 ## Why this project exists
 
-Teams that depend on webhooks usually do not fail at the "receive HTTP" part. They fail when delivery becomes unreliable, payloads drift, downstream handlers break, or retries happen outside any visible control surface.
+Small engineering teams do not struggle because AWS lacks billing data. They struggle because the signal is scattered across budgets, anomaly alerts, and optimization recommendations, and nobody knows what to review first when the bill jumps.
 
-This project treats that as a platform problem:
+This project treats that as an inbox problem:
 
-- ingest webhook events through a public endpoint
-- persist event summaries in `DynamoDB`
-- archive raw payloads in `S3`
-- expose a small operator console for inspection
-- support controlled replay with explicit state changes
+- ingest AWS spend alerts through a small API
+- persist review cases in `DynamoDB`
+- archive raw alert payloads in `S3`
+- expose a small operator console for triage
+- let one operator acknowledge or resolve a case with an explicit note
 
 ## AWS-first stack
 
-- `API Gateway HTTP API` for webhook ingress and operator APIs
-- `AWS Lambda (Python)` for ingest, listing, detail lookup, and replay
-- `DynamoDB` for event metadata and status tracking
-- `S3` for raw payload archival and replay artifacts
+- `API Gateway HTTP API` for alert ingress and operator APIs
+- `AWS Lambda (Python)` for ingest, listing, detail lookup, and case review
+- `DynamoDB` for case metadata and status tracking
+- `S3` for raw alert archival and review artifacts
 - `CloudWatch Logs` for operational traceability
 - `AWS SAM` for infrastructure and deployment
 - `Static frontend` for the operator console
 
 ## Why AWS fits
 
-This is not a CRUD app looking for a cloud host. It is a naturally event-driven workflow:
+This is not a generic analytics dashboard. It is a narrow AWS operations workflow:
 
-- `API Gateway` receives untrusted external traffic
-- `Lambda` normalizes and processes short-lived requests
-- `DynamoDB` stores replayable event state cheaply
-- `S3` provides forensic storage for raw payloads
+- `API Gateway` receives alerts from budgets, anomaly monitors, or manual intake
+- `Lambda` normalizes those alerts into small review cases
+- `DynamoDB` stores action status cheaply
+- `S3` provides forensic storage for the original alert payload
 
 That gives the project a clean single-vendor story instead of a mixed deployment narrative.
 
 ## MVP scope
 
-- receive webhook requests at `POST /webhooks/{source}`
-- write raw payloads to `S3`
-- write event summaries to `DynamoDB`
+- receive alerts at `POST /alerts/{source}`
+- write raw alert payloads to `S3`
+- write review cases to `DynamoDB`
 - expose:
-  - `GET /events`
-  - `GET /events/{eventId}`
-  - `POST /events/{eventId}/replay`
-- support event statuses:
-  - `PROCESSED`
-  - `FAILED`
-  - `REPLAYED`
+  - `GET /cases`
+  - `GET /cases/{caseId}`
+  - `POST /cases/{caseId}/review`
+- support case statuses:
+  - `NEW`
+  - `ACKNOWLEDGED`
+  - `RESOLVED`
 - provide a small operator console in `frontend/`
 
 ## Repository layout
@@ -85,12 +85,12 @@ sam deploy --guided
 sam local start-api
 ```
 
-Then post a sample webhook:
+Then post a sample alert:
 
 ```bash
-curl -X POST http://127.0.0.1:3000/webhooks/shopify \
+curl -X POST http://127.0.0.1:3000/alerts/anomaly-detection \
   -H "content-type: application/json" \
-  -d @events/sample-webhook.json
+  -d @events/sample-cost-alert.json
 ```
 
 ### 4. Open the operator console
@@ -122,31 +122,33 @@ This script:
 - applies a public read bucket policy
 - uploads the static files
 
-## Event model
+## Case model
 
-Each event record tracks:
+Each case record tracks:
 
-- `eventId`
+- `caseId`
+- `title`
 - `source`
-- `eventType`
+- `service`
+- `severity`
+- `estimatedImpactUsd`
 - `status`
 - `receivedAt`
-- `correlationId`
+- `lastUpdatedAt`
 - `payloadS3Key`
-- `replayCount`
-- `lastReplayReason`
-- `lastErrorCode`
-- `lastErrorMessage`
+- `reviewCount`
+- `lastReviewNote`
+- `owner`
 
 ## Current implementation notes
 
-- ingest can simulate failure when the body includes `"simulateFailure": true`
-- replay currently updates event state and writes a replay artifact
-- production-grade downstream forwarding is intentionally left for a later iteration
+- alerts can come from `budgets`, `anomaly-detection`, `compute-optimizer`, or `manual`
+- review currently means `ACKNOWLEDGED` or `RESOLVED`
+- automated enrichment from real AWS Cost APIs is intentionally left for a later iteration
 
 ## Next high-value steps
 
-1. Add request authentication per source
-2. Add a replay target and signed delivery attempts
-3. Replace list-event `scan` behavior with stricter indexed access patterns
-4. Add CloudWatch dashboards and alarms
+1. Add direct ingestion from AWS Budgets and Cost Anomaly Detection
+2. Add owner assignment and saved views
+3. Replace list-case `scan` behavior with stricter indexed access patterns
+4. Add CloudWatch dashboards and cost review notifications

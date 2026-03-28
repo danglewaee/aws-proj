@@ -2,33 +2,32 @@
 
 ## One-line thesis
 
-`Webhook Replay Console` is an AWS-native operator surface for webhook ingestion, inspection, and replay.
+`AWS Spend Inbox` is an AWS-native operator console for reviewing unexpected cost alerts and deciding what to inspect first.
 
 ## Core user
 
-- integration engineers
-- backend teams maintaining webhook handlers
-- operations teams debugging delivery failures
+- startup founders watching the AWS bill directly
+- devops or platform engineers
+- backend leads who get asked why cloud spend suddenly jumped
 
 ## Main pain
 
-- failed webhooks are hard to inspect
-- raw payloads are not easy to recover
-- retries happen through ad-hoc scripts
-- there is no clean audit trail for manual replay
+- cost alerts arrive, but nobody knows what to look at first
+- budgets, anomaly alerts, and optimization recommendations live in different places
+- teams need one place to record "we saw this" and "we fixed this"
 
 ## AWS architecture
 
 ```mermaid
 flowchart LR
-    A["External webhook source"] --> B["API Gateway HTTP API"]
-    B --> C["Lambda: ingest"]
-    C --> D["DynamoDB: webhook-events"]
-    C --> E["S3: raw-payload-bucket"]
+    A["AWS Budgets / Cost alerts / Manual intake"] --> B["API Gateway HTTP API"]
+    B --> C["Lambda: ingest alert"]
+    C --> D["DynamoDB: spend cases"]
+    C --> E["S3: alert archive"]
     F["Operator console"] --> B
-    B --> G["Lambda: list-events"]
-    B --> H["Lambda: get-event"]
-    B --> I["Lambda: replay"]
+    B --> G["Lambda: list cases"]
+    B --> H["Lambda: get case"]
+    B --> I["Lambda: review case"]
     I --> D
     I --> E
     C --> J["CloudWatch Logs"]
@@ -41,49 +40,49 @@ flowchart LR
 
 ### API Gateway
 
-- public ingress for webhook sources
-- operator-facing endpoints for list, detail, and replay
+- accepts alert ingestion requests
+- exposes operator-facing endpoints for list, detail, and review
 
 ### Lambda ingest
 
-- accepts webhook payload
-- derives metadata such as `source`, `eventType`, and `correlationId`
-- stores raw payload in `S3`
-- stores event summary in `DynamoDB`
+- accepts an alert payload
+- normalizes it into a small spend review case
+- stores raw alert payload in `S3`
+- stores case metadata in `DynamoDB`
 
 ### DynamoDB
 
-Stores event summary and replay state:
+Stores case status and review state:
 
-- event identifier
+- case identifier
 - status
 - source
-- timestamps
-- replay count
-- error fields
-- payload archive key
+- service
+- severity
+- estimated impact
+- review note and timestamps
 
 ### S3
 
 Stores:
 
-- raw webhook payloads
-- replay artifacts
+- raw alert payloads
+- review artifacts
 
 ### Operator console
 
 Provides:
 
-- event list
-- event detail
-- replay trigger
+- case list
+- case detail
+- acknowledge and resolve actions
 - quick API base configuration
 
 ## Data model
 
-### Table: `webhook-events`
+### Table: `spend-cases`
 
-- primary key: `eventId`
+- primary key: `caseId`
 - global secondary index:
   - partition key: `status`
   - sort key: `receivedAt`
@@ -91,20 +90,19 @@ Provides:
 ### Typical state transitions
 
 ```text
-RECEIVED -> PROCESSED
-RECEIVED -> FAILED
-FAILED -> REPLAYED
-PROCESSED -> REPLAYED
+NEW -> ACKNOWLEDGED
+NEW -> RESOLVED
+ACKNOWLEDGED -> RESOLVED
 ```
 
 ## Honest scope boundary
 
 This scaffold intentionally stops short of:
 
-- provider-specific webhook signature verification
-- dead-letter queues
-- automatic retry policies
-- production-grade downstream delivery fan-out
+- live ingestion from actual AWS Cost APIs
+- account-wide forecasting
+- automated remediation
+- multi-account organization rollups
 - full auth and RBAC
 
-Those belong in the next iteration, after the operator workflow is stable.
+Those belong in the next iteration, after the review workflow is stable.

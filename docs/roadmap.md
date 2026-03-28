@@ -3,20 +3,20 @@
 ## Week 1
 
 - deploy `API Gateway`, `Lambda`, `DynamoDB`, and `S3`
-- accept webhook payloads through `POST /webhooks/{source}`
-- persist raw payload and summary metadata
+- accept spend alerts through `POST /alerts/{source}`
+- persist raw payloads and case metadata
 
 ## Week 2
 
-- finish operator console event list
-- add event detail page behavior
-- filter by `status`, `source`, and `eventType`
+- finish operator console case list
+- add case detail behavior
+- filter by `status`, `source`, `service`, and `severity`
 
 ## Week 3
 
-- implement replay state changes
-- store replay artifacts in `S3`
-- improve logs and correlation tracing
+- implement acknowledge and resolve actions
+- store review artifacts in `S3`
+- improve review notes and ownership fields
 
 ## Week 4
 
@@ -26,8 +26,8 @@
 
 ## Explicit non-goals for V1
 
-- multi-tenant support
-- provider-specific cryptographic signature verification
-- Slack or email alerting
-- dead-letter queue orchestration
-- long-running workflow engines
+- multi-account FinOps platform
+- forecasting or custom anomaly models
+- automated shutdowns or remediation
+- Slack or email workflows
+- role-based access control

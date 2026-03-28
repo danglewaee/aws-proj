@@ -1,0 +1,14 @@
+{
+  "title": "EC2 spend jumped outside the normal daily range",
+  "service": "Amazon EC2",
+  "severity": "HIGH",
+  "estimatedImpactUsd": 182.4,
+  "alertType": "ANOMALY",
+  "likelyCause": "A batch worker fleet appears to have stayed on after the nightly job completed.",
+  "suggestedAction": "Check newly launched EC2 instances in us-east-1 and stop the idle worker group first.",
+  "owner": "platform",
+  "resourceHints": [
+    "AutoScalingGroup/batch-workers",
+    "i-0abc123def4567890"
+  ]
+}

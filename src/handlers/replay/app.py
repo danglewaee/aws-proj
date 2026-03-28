@@ -1,64 +1,80 @@
 import json
 from datetime import datetime, timezone
 
-from shared.config import raw_payload_bucket_name, webhook_events_table_name
+from shared.config import alert_archive_bucket_name, spend_cases_table_name
 from shared.dynamo import deserialize_item, table_resource
-from shared.http import not_found, json_response
+from shared.http import bad_request, not_found, json_response
 from shared.storage import s3_client
 
 
 def lambda_handler(event, context):
-    event_id = (event.get("pathParameters") or {}).get("eventId")
-    if not event_id:
-        return not_found("Event id was not provided.")
+    case_id = (event.get("pathParameters") or {}).get("caseId")
+    if not case_id:
+        return not_found("Case id was not provided.")
 
     body = json.loads(event.get("body") or "{}")
-    replay_reason = body.get("reason", "manual replay requested")
-    replayed_at = datetime.now(timezone.utc).isoformat()
+    requested_status = (body.get("status") or "").upper()
+    review_note = body.get("note", "Manual review update.")
+    owner = body.get("owner")
+    reviewed_at = datetime.now(timezone.utc).isoformat()
 
-    table = table_resource(webhook_events_table_name())
-    response = table.get_item(Key={"eventId": event_id})
+    if requested_status not in {"ACKNOWLEDGED", "RESOLVED"}:
+        return bad_request("Status must be ACKNOWLEDGED or RESOLVED.")
+
+    table = table_resource(spend_cases_table_name())
+    response = table.get_item(Key={"caseId": case_id})
     item = response.get("Item")
     if not item:
-        return not_found(f"Event {event_id} was not found.")
+        return not_found(f"Case {case_id} was not found.")
 
     payload_key = item.get("payloadS3Key")
     if payload_key:
         payload_response = s3_client.get_object(
-            Bucket=raw_payload_bucket_name(),
+            Bucket=alert_archive_bucket_name(),
             Key=payload_key,
         )
-        original_payload = payload_response["Body"].read()
-        replay_key = f"replays/{item['source']}/{replayed_at}/{event_id}.json"
+        original_payload = json.loads(payload_response["Body"].read().decode("utf-8"))
+        review_key = f"reviews/{item['source']}/{reviewed_at}/{case_id}.json"
         s3_client.put_object(
-            Bucket=raw_payload_bucket_name(),
-            Key=replay_key,
-            Body=original_payload,
+            Bucket=alert_archive_bucket_name(),
+            Key=review_key,
+            Body=json.dumps(
+                {
+                    "reviewedAt": reviewed_at,
+                    "status": requested_status,
+                    "note": review_note,
+                    "owner": owner or item.get("owner", "unassigned"),
+                    "alertPayload": original_payload,
+                }
+            ).encode("utf-8"),
             ContentType="application/json",
-            Metadata={"replay-reason": replay_reason},
         )
 
-    replay_count = int(item.get("replayCount", 0)) + 1
+    review_count = int(item.get("reviewCount", 0)) + 1
+    resolved_at = reviewed_at if requested_status == "RESOLVED" else item.get("resolvedAt")
     table.update_item(
-        Key={"eventId": event_id},
+        Key={"caseId": case_id},
         UpdateExpression=(
-            "SET #status = :status, replayCount = :replay_count, replayedAt = :replayed_at, "
-            "lastProcessedAt = :replayed_at, lastReplayReason = :reason"
+            "SET #status = :status, reviewCount = :review_count, lastReviewedAt = :reviewed_at, "
+            "lastUpdatedAt = :reviewed_at, lastReviewNote = :note, owner = :owner, "
+            "resolvedAt = :resolved_at"
         ),
         ExpressionAttributeNames={"#status": "status"},
         ExpressionAttributeValues={
-            ":status": "REPLAYED",
-            ":replay_count": replay_count,
-            ":replayed_at": replayed_at,
-            ":reason": replay_reason,
+            ":status": requested_status,
+            ":review_count": review_count,
+            ":reviewed_at": reviewed_at,
+            ":note": review_note,
+            ":owner": owner or item.get("owner", "unassigned"),
+            ":resolved_at": resolved_at,
         },
     )
 
-    updated = table.get_item(Key={"eventId": event_id}).get("Item", {})
+    updated = table.get_item(Key={"caseId": case_id}).get("Item", {})
     return json_response(
         200,
         {
-            "message": "Replay recorded.",
-            "event": deserialize_item(updated),
+            "message": "Case review recorded.",
+            "case": deserialize_item(updated),
         },
     )

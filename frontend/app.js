@@ -1,24 +1,26 @@
 const configuredBaseUrl =
-    (window.WEBHOOK_CONSOLE_CONFIG && window.WEBHOOK_CONSOLE_CONFIG.apiBaseUrl) || "";
-const savedBaseUrl = localStorage.getItem("webhook-console-api-base-url") || configuredBaseUrl;
+    (window.SPEND_INBOX_CONFIG && window.SPEND_INBOX_CONFIG.apiBaseUrl) || "";
+const savedBaseUrl = localStorage.getItem("spend-inbox-api-base-url") || configuredBaseUrl;
 
 const state = {
     apiBaseUrl: savedBaseUrl,
-    selectedEventId: null,
-    events: []
+    selectedCaseId: null,
+    cases: []
 };
 
-const sampleWebhook = {
-    type: "order.paid",
-    providerEventId: "evt_shopify_120045",
-    correlationId: "corr-demo-001",
-    simulateFailure: true,
-    order: {
-        orderId: "SO-240501",
-        currency: "USD",
-        amount: 245.5,
-        customerEmail: "ops-demo@example.com"
-    }
+const sampleAlert = {
+    title: "EC2 spend jumped outside the normal daily range",
+    service: "Amazon EC2",
+    severity: "HIGH",
+    estimatedImpactUsd: 182.4,
+    alertType: "ANOMALY",
+    likelyCause: "A batch worker fleet appears to have stayed on after the nightly job completed.",
+    suggestedAction: "Check newly launched EC2 instances in us-east-1 and stop the idle worker group first.",
+    owner: "platform",
+    resourceHints: [
+        "AutoScalingGroup/batch-workers",
+        "i-0abc123def4567890"
+    ]
 };
 
 function byId(id) {
@@ -29,39 +31,43 @@ function normalizedBaseUrl() {
     return (state.apiBaseUrl || "").replace(/\/$/, "");
 }
 
-function renderEvents() {
-    const list = byId("eventList");
-    const count = byId("eventCount");
+function renderCases() {
+    const list = byId("caseList");
+    const count = byId("caseCount");
     list.innerHTML = "";
-    count.textContent = `${state.events.length} loaded`;
+    count.textContent = `${state.cases.length} loaded`;
 
-    if (state.events.length === 0) {
-        list.innerHTML = '<p class="empty">No events loaded yet.</p>';
+    if (state.cases.length === 0) {
+        list.innerHTML = '<p class="empty">No cost review cases loaded yet.</p>';
         return;
     }
 
-    state.events.forEach((event) => {
+    state.cases.forEach((item) => {
         const row = document.createElement("article");
         row.className = "event-row";
         row.innerHTML = `
-            <div class="event-title">${event.eventType || "unknown"} <span class="pill">${event.status}</span></div>
-            <div class="event-meta">${event.source} | ${event.receivedAt} | replayed ${event.replayCount || 0} times</div>
-            <button class="secondary" data-event-id="${event.eventId}">Inspect</button>
+            <div class="event-title">${item.title || "untitled case"} <span class="pill">${item.status}</span></div>
+            <div class="event-meta">${item.service || "Unknown service"} | ${item.severity || "UNKNOWN"} | +$${Number(item.estimatedImpactUsd || 0).toFixed(2)} | ${item.receivedAt}</div>
+            <button class="secondary" data-case-id="${item.caseId}">Inspect</button>
         `;
-        row.querySelector("button").addEventListener("click", () => loadEvent(event.eventId));
+        row.querySelector("button").addEventListener("click", () => loadCase(item.caseId));
         list.appendChild(row);
     });
 }
 
 function renderDetail(payload) {
-    const event = payload.event;
-    state.selectedEventId = event.eventId;
+    const item = payload.case;
+    state.selectedCaseId = item.caseId;
 
-    byId("detailStatus").textContent = event.status || "UNKNOWN";
-    byId("detailEventId").textContent = event.eventId || "-";
-    byId("detailSource").textContent = event.source || "-";
-    byId("detailType").textContent = event.eventType || "-";
-    byId("detailReplayCount").textContent = String(event.replayCount || 0);
+    byId("detailStatus").textContent = item.status || "UNKNOWN";
+    byId("detailCaseId").textContent = item.caseId || "-";
+    byId("detailSource").textContent = item.sourceLabel || item.source || "-";
+    byId("detailService").textContent = item.service || "-";
+    byId("detailSeverity").textContent = item.severity || "-";
+    byId("detailImpact").textContent = `$${Number(item.estimatedImpactUsd || 0).toFixed(2)}`;
+    byId("detailOwner").textContent = item.owner || "unassigned";
+    byId("detailLikelyCause").textContent = item.likelyCause || "-";
+    byId("detailSuggestedAction").textContent = item.suggestedAction || "-";
     byId("payloadView").textContent = JSON.stringify(payload.payload || {}, null, 2);
 }
 
@@ -86,10 +92,12 @@ async function apiFetch(path, options = {}) {
     return data;
 }
 
-async function loadEvents() {
+async function loadCases() {
     try {
         const status = byId("statusFilter").value.trim();
         const source = byId("sourceFilter").value.trim();
+        const service = byId("serviceFilter").value.trim();
+        const severity = byId("severityFilter").value.trim();
         const params = new URLSearchParams();
         if (status) {
             params.set("status", status);
@@ -97,51 +105,57 @@ async function loadEvents() {
         if (source) {
             params.set("source", source);
         }
+        if (service) {
+            params.set("service", service);
+        }
+        if (severity) {
+            params.set("severity", severity);
+        }
 
         const suffix = params.toString() ? `?${params.toString()}` : "";
-        const data = await apiFetch(`/events${suffix}`);
-        state.events = data.items || [];
-        renderEvents();
+        const data = await apiFetch(`/cases${suffix}`);
+        state.cases = data.items || [];
+        renderCases();
     } catch (error) {
         alert(error.message);
     }
 }
 
-async function loadEvent(eventId) {
+async function loadCase(caseId) {
     try {
-        const data = await apiFetch(`/events/${eventId}`);
+        const data = await apiFetch(`/cases/${caseId}`);
         renderDetail(data);
     } catch (error) {
         alert(error.message);
     }
 }
 
-async function ingestSampleEvent() {
+async function ingestSampleAlert() {
     try {
-        await apiFetch("/webhooks/shopify", {
+        await apiFetch("/alerts/anomaly-detection", {
             method: "POST",
-            body: JSON.stringify(sampleWebhook)
+            body: JSON.stringify(sampleAlert)
         });
-        await loadEvents();
+        await loadCases();
     } catch (error) {
         alert(error.message);
     }
 }
 
-async function replaySelectedEvent() {
-    if (!state.selectedEventId) {
-        alert("Select an event first.");
+async function reviewSelectedCase(status) {
+    if (!state.selectedCaseId) {
+        alert("Select a case first.");
         return;
     }
 
     try {
-        const reason = byId("replayReason").value.trim() || "manual replay requested";
-        await apiFetch(`/events/${state.selectedEventId}/replay`, {
+        const note = byId("reviewNote").value.trim() || "Manual cost review update.";
+        await apiFetch(`/cases/${state.selectedCaseId}/review`, {
             method: "POST",
-            body: JSON.stringify({ reason })
+            body: JSON.stringify({ status, note })
         });
-        await loadEvent(state.selectedEventId);
-        await loadEvents();
+        await loadCase(state.selectedCaseId);
+        await loadCases();
     } catch (error) {
         alert(error.message);
     }
@@ -149,16 +163,17 @@ async function replaySelectedEvent() {
 
 function saveBaseUrl() {
     state.apiBaseUrl = byId("apiBaseUrl").value.trim();
-    localStorage.setItem("webhook-console-api-base-url", state.apiBaseUrl);
+    localStorage.setItem("spend-inbox-api-base-url", state.apiBaseUrl);
 }
 
 function boot() {
     byId("apiBaseUrl").value = state.apiBaseUrl;
     byId("saveBaseUrl").addEventListener("click", saveBaseUrl);
-    byId("refreshEvents").addEventListener("click", loadEvents);
-    byId("ingestSample").addEventListener("click", ingestSampleEvent);
-    byId("applyFilters").addEventListener("click", loadEvents);
-    byId("replayEvent").addEventListener("click", replaySelectedEvent);
+    byId("refreshCases").addEventListener("click", loadCases);
+    byId("ingestSample").addEventListener("click", ingestSampleAlert);
+    byId("applyFilters").addEventListener("click", loadCases);
+    byId("acknowledgeCase").addEventListener("click", () => reviewSelectedCase("ACKNOWLEDGED"));
+    byId("resolveCase").addEventListener("click", () => reviewSelectedCase("RESOLVED"));
 }
 
 boot();
