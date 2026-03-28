@@ -1,0 +1,12 @@
+{
+  "type": "order.paid",
+  "providerEventId": "evt_shopify_120045",
+  "correlationId": "corr-demo-001",
+  "simulateFailure": true,
+  "order": {
+    "orderId": "SO-240501",
+    "currency": "USD",
+    "amount": 245.50,
+    "customerEmail": "ops-demo@example.com"
+  }
+}

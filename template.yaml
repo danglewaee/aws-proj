@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWS-first Webhook Replay Console
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 10
+    MemorySize: 256
+    Tracing: Active
+    Environment:
+      Variables:
+        WEBHOOK_EVENTS_TABLE: !Ref WebhookEventsTable
+        RAW_PAYLOAD_BUCKET: !Ref RawPayloadBucket
+        STATUS_INDEX_NAME: status-receivedAt-index
+
+Resources:
+  WebhookApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - content-type
+          - x-correlation-id
+          - x-source-token
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+
+  RawPayloadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+
+  WebhookEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: eventId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: receivedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: eventId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: status-receivedAt-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: receivedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.ingest.app.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookEventsTable
+        - S3CrudPolicy:
+            BucketName: !Ref RawPayloadBucket
+      Events:
+        IngestWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Method: POST
+            Path: /webhooks/{source}
+
+  ListEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.list_events.app.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref WebhookEventsTable
+      Events:
+        ListEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Method: GET
+            Path: /events
+
+  GetEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.get_event.app.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref WebhookEventsTable
+        - S3ReadPolicy:
+            BucketName: !Ref RawPayloadBucket
+      Events:
+        GetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Method: GET
+            Path: /events/{eventId}
+
+  ReplayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.replay.app.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookEventsTable
+        - S3CrudPolicy:
+            BucketName: !Ref RawPayloadBucket
+      Events:
+        ReplayEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Method: POST
+            Path: /events/{eventId}/replay
+
+Outputs:
+  ApiBaseUrl:
+    Description: Public URL for the HTTP API.
+    Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com"
+
+  RawPayloadBucketName:
+    Description: Bucket storing archived webhook payloads and replay artifacts.
+    Value: !Ref RawPayloadBucket
+
+  WebhookEventsTableName:
+    Description: DynamoDB table storing event summaries and replay state.
+    Value: !Ref WebhookEventsTable

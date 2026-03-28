@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Replay Console</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div class="shell">
+    <header class="hero">
+        <div>
+            <p class="eyebrow">AWS-first internal tool</p>
+            <h1>Webhook Replay Console</h1>
+            <p class="hero-copy">
+                Inspect failed webhook events, read archived payloads, and trigger controlled replay
+                without leaving one operator surface.
+            </p>
+        </div>
+        <div class="hero-card">
+            <label for="apiBaseUrl">API base URL</label>
+            <input id="apiBaseUrl" type="text" placeholder="https://your-api.execute-api.us-east-1.amazonaws.com">
+            <div class="hero-actions">
+                <button id="saveBaseUrl">Save URL</button>
+                <button id="refreshEvents" class="secondary">Refresh events</button>
+                <button id="ingestSample" class="secondary">Send sample event</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="grid">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <p class="section-label">Queue</p>
+                    <h2>Events</h2>
+                </div>
+                <span class="pill" id="eventCount">0 loaded</span>
+            </div>
+
+            <div class="filters">
+                <input id="statusFilter" type="text" placeholder="status: FAILED">
+                <input id="sourceFilter" type="text" placeholder="source: shopify">
+                <button id="applyFilters" class="secondary">Apply filters</button>
+            </div>
+
+            <div class="event-list" id="eventList">
+                <p class="empty">No events loaded yet.</p>
+            </div>
+        </section>
+
+        <section class="panel detail-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="section-label">Detail</p>
+                    <h2>Selected event</h2>
+                </div>
+                <span class="pill" id="detailStatus">None</span>
+            </div>
+
+            <div class="detail-grid">
+                <article class="detail-card">
+                    <span class="detail-label">Event ID</span>
+                    <strong id="detailEventId">Select an event</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Source</span>
+                    <strong id="detailSource">-</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Type</span>
+                    <strong id="detailType">-</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Replay count</span>
+                    <strong id="detailReplayCount">0</strong>
+                </article>
+            </div>
+
+            <label for="replayReason">Replay reason</label>
+            <input id="replayReason" type="text" placeholder="Manual verification after downstream fix">
+            <button id="replayEvent">Replay selected event</button>
+
+            <div class="payload-panel">
+                <p class="section-label">Payload</p>
+                <pre id="payloadView">Select an event to inspect its payload.</pre>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script src="./config.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+:root {
+    --bg: #f5f0e3;
+    --panel: rgba(255, 252, 246, 0.9);
+    --panel-strong: rgba(255, 252, 246, 0.98);
+    --ink: #17261e;
+    --ink-soft: #4d6157;
+    --line: rgba(23, 38, 30, 0.12);
+    --accent: #bf4a23;
+    --accent-deep: #823017;
+    --cool: #145f53;
+    --shadow: 0 26px 70px rgba(61, 45, 24, 0.14);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--ink);
+    background:
+        radial-gradient(circle at top left, rgba(191, 74, 35, 0.16), transparent 24rem),
+        radial-gradient(circle at 85% 15%, rgba(20, 95, 83, 0.16), transparent 22rem),
+        linear-gradient(180deg, #f8f3e9 0%, #efe5d5 100%);
+    font-family: "Aptos", "Segoe UI", sans-serif;
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+.shell {
+    width: min(1180px, calc(100% - 2rem));
+    margin: 0 auto;
+    padding: 2rem 0 3rem;
+}
+
+.hero {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.eyebrow,
+.section-label {
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.hero h1,
+.panel h2 {
+    margin: 0.35rem 0 0.7rem;
+    font-family: "Georgia", "Times New Roman", serif;
+}
+
+.hero h1 {
+    font-size: clamp(2.8rem, 8vw, 4.8rem);
+    line-height: 0.94;
+}
+
+.hero-copy,
+.empty,
+pre,
+.detail-label {
+    color: var(--ink-soft);
+}
+
+.hero-card,
+.panel,
+.detail-card,
+.event-row {
+    border: 1px solid var(--line);
+    border-radius: 1.4rem;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+}
+
+.hero-card,
+.panel {
+    padding: 1.2rem;
+}
+
+.hero-card label,
+.detail-panel label {
+    display: block;
+    margin-bottom: 0.45rem;
+    font-weight: 700;
+}
+
+input {
+    width: 100%;
+    padding: 0.82rem 0.95rem;
+    border: 1px solid rgba(23, 38, 30, 0.12);
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.75);
+}
+
+.hero-actions,
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.85rem;
+}
+
+button {
+    padding: 0.85rem 1rem;
+    border: none;
+    border-radius: 999px;
+    color: #fff7f0;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+}
+
+button.secondary {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(23, 38, 30, 0.12);
+}
+
+.grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.45rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(23, 38, 30, 0.08);
+}
+
+.event-list {
+    display: grid;
+    gap: 0.7rem;
+    margin-top: 1rem;
+}
+
+.event-row {
+    padding: 0.95rem 1rem;
+    background: var(--panel-strong);
+}
+
+.event-row button {
+    margin-top: 0.75rem;
+}
+
+.event-title {
+    font-weight: 800;
+}
+
+.event-meta {
+    margin-top: 0.3rem;
+    color: var(--ink-soft);
+    font-size: 0.92rem;
+}
+
+.detail-grid {
+    display: grid;
+    gap: 0.8rem;
+    margin: 1rem 0;
+}
+
+.detail-card {
+    padding: 0.9rem 1rem;
+    background: var(--panel-strong);
+}
+
+.detail-label {
+    display: block;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.detail-card strong {
+    display: block;
+    margin-top: 0.45rem;
+}
+
+.payload-panel {
+    margin-top: 1rem;
+    padding-top: 0.5rem;
+}
+
+pre {
+    overflow: auto;
+    padding: 1rem;
+    border-radius: 1.1rem;
+    background: rgba(23, 38, 30, 0.06);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+@media (min-width: 880px) {
+    .hero {
+        grid-template-columns: 1.1fr 0.9fr;
+        align-items: end;
+    }
+
+    .grid {
+        grid-template-columns: 0.9fr 1.1fr;
+    }
+
+    .detail-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
