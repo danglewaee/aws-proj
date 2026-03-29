@@ -1,26 +1,29 @@
 const configuredBaseUrl =
-    (window.SPEND_INBOX_CONFIG && window.SPEND_INBOX_CONFIG.apiBaseUrl) || "";
-const savedBaseUrl = localStorage.getItem("spend-inbox-api-base-url") || configuredBaseUrl;
+    (window.LEAK_GUARD_CONFIG && window.LEAK_GUARD_CONFIG.apiBaseUrl) || "";
+const savedBaseUrl = localStorage.getItem("leak-guard-api-base-url") || configuredBaseUrl;
 
 const state = {
     apiBaseUrl: savedBaseUrl,
-    selectedCaseId: null,
-    cases: []
+    selectedFindingId: null,
+    findings: []
 };
 
-const sampleAlert = {
-    title: "EC2 spend jumped outside the normal daily range",
-    service: "Amazon EC2",
-    severity: "HIGH",
-    estimatedImpactUsd: 182.4,
-    alertType: "ANOMALY",
-    likelyCause: "A batch worker fleet appears to have stayed on after the nightly job completed.",
-    suggestedAction: "Check newly launched EC2 instances in us-east-1 and stop the idle worker group first.",
-    owner: "platform",
-    resourceHints: [
-        "AutoScalingGroup/batch-workers",
-        "i-0abc123def4567890"
-    ]
+const samplePush = {
+    ref: "refs/heads/main",
+    before: "1111111111111111111111111111111111111111",
+    after: "2222222222222222222222222222222222222222",
+    compare: "https://github.com/acme/demo-repo/compare/1111111...2222222",
+    repository: {
+        full_name: "acme/demo-repo"
+    },
+    inlineDiff: [
+        "diff --git a/app.py b/app.py",
+        "index 123..456 100644",
+        "--- a/app.py",
+        "+++ b/app.py",
+        "@@ -1,3 +1,5 @@",
+        "+AWS_ACCESS_KEY_ID = \"AKIAIOSFODNN7EXAMPLE\""
+    ].join("\n")
 };
 
 function byId(id) {
@@ -31,43 +34,43 @@ function normalizedBaseUrl() {
     return (state.apiBaseUrl || "").replace(/\/$/, "");
 }
 
-function renderCases() {
-    const list = byId("caseList");
-    const count = byId("caseCount");
+function renderFindings() {
+    const list = byId("findingList");
+    const count = byId("findingCount");
     list.innerHTML = "";
-    count.textContent = `${state.cases.length} loaded`;
+    count.textContent = `${state.findings.length} loaded`;
 
-    if (state.cases.length === 0) {
-        list.innerHTML = '<p class="empty">No cost review cases loaded yet.</p>';
+    if (state.findings.length === 0) {
+        list.innerHTML = '<p class="empty">No leaked key findings loaded yet.</p>';
         return;
     }
 
-    state.cases.forEach((item) => {
+    state.findings.forEach((item) => {
         const row = document.createElement("article");
         row.className = "event-row";
         row.innerHTML = `
-            <div class="event-title">${item.title || "untitled case"} <span class="pill">${item.status}</span></div>
-            <div class="event-meta">${item.service || "Unknown service"} | ${item.severity || "UNKNOWN"} | +$${Number(item.estimatedImpactUsd || 0).toFixed(2)} | ${item.receivedAt}</div>
-            <button class="secondary" data-case-id="${item.caseId}">Inspect</button>
+            <div class="event-title">${item.matchedKeyIdRedacted || "unknown key"} <span class="pill">${item.status}</span></div>
+            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.secretType || "unknown"} | ${item.iamUserName || "unresolved user"} | ${item.receivedAt}</div>
+            <button class="secondary" data-finding-id="${item.findingId}">Inspect</button>
         `;
-        row.querySelector("button").addEventListener("click", () => loadCase(item.caseId));
+        row.querySelector("button").addEventListener("click", () => loadFinding(item.findingId));
         list.appendChild(row);
     });
 }
 
 function renderDetail(payload) {
-    const item = payload.case;
-    state.selectedCaseId = item.caseId;
+    const item = payload.finding;
+    state.selectedFindingId = item.findingId;
 
     byId("detailStatus").textContent = item.status || "UNKNOWN";
-    byId("detailCaseId").textContent = item.caseId || "-";
-    byId("detailSource").textContent = item.sourceLabel || item.source || "-";
-    byId("detailService").textContent = item.service || "-";
-    byId("detailSeverity").textContent = item.severity || "-";
-    byId("detailImpact").textContent = `$${Number(item.estimatedImpactUsd || 0).toFixed(2)}`;
-    byId("detailOwner").textContent = item.owner || "unassigned";
-    byId("detailLikelyCause").textContent = item.likelyCause || "-";
-    byId("detailSuggestedAction").textContent = item.suggestedAction || "-";
+    byId("detailFindingId").textContent = item.findingId || "-";
+    byId("detailRepo").textContent = item.repoFullName || "-";
+    byId("detailBranch").textContent = item.branch || "-";
+    byId("detailSecretType").textContent = item.secretType || "-";
+    byId("detailKeyId").textContent = item.matchedKeyIdRedacted || "-";
+    byId("detailUser").textContent = item.iamUserName || "not resolved";
+    byId("detailCompareUrl").textContent = item.compareUrl || "-";
+    byId("detailLastUsedService").textContent = item.lastUsedService || "unknown";
     byId("payloadView").textContent = JSON.stringify(payload.payload || {}, null, 2);
 }
 
@@ -92,70 +95,66 @@ async function apiFetch(path, options = {}) {
     return data;
 }
 
-async function loadCases() {
+async function loadFindings() {
     try {
         const status = byId("statusFilter").value.trim();
-        const source = byId("sourceFilter").value.trim();
-        const service = byId("serviceFilter").value.trim();
-        const severity = byId("severityFilter").value.trim();
+        const repo = byId("repoFilter").value.trim();
+        const secretType = byId("secretTypeFilter").value.trim();
         const params = new URLSearchParams();
         if (status) {
             params.set("status", status);
         }
-        if (source) {
-            params.set("source", source);
+        if (repo) {
+            params.set("repo", repo);
         }
-        if (service) {
-            params.set("service", service);
-        }
-        if (severity) {
-            params.set("severity", severity);
+        if (secretType) {
+            params.set("secretType", secretType);
         }
 
         const suffix = params.toString() ? `?${params.toString()}` : "";
-        const data = await apiFetch(`/cases${suffix}`);
-        state.cases = data.items || [];
-        renderCases();
+        const data = await apiFetch(`/findings${suffix}`);
+        state.findings = data.items || [];
+        renderFindings();
     } catch (error) {
         alert(error.message);
     }
 }
 
-async function loadCase(caseId) {
+async function loadFinding(findingId) {
     try {
-        const data = await apiFetch(`/cases/${caseId}`);
+        const data = await apiFetch(`/findings/${findingId}`);
         renderDetail(data);
     } catch (error) {
         alert(error.message);
     }
 }
 
-async function ingestSampleAlert() {
+async function ingestSamplePush() {
     try {
-        await apiFetch("/alerts/anomaly-detection", {
+        await apiFetch("/github/webhook", {
             method: "POST",
-            body: JSON.stringify(sampleAlert)
+            body: JSON.stringify(samplePush)
         });
-        await loadCases();
+        await loadFindings();
     } catch (error) {
         alert(error.message);
     }
 }
 
-async function reviewSelectedCase(status) {
-    if (!state.selectedCaseId) {
-        alert("Select a case first.");
+async function takeAction(action) {
+    if (!state.selectedFindingId) {
+        alert("Select a finding first.");
         return;
     }
 
     try {
-        const note = byId("reviewNote").value.trim() || "Manual cost review update.";
-        await apiFetch(`/cases/${state.selectedCaseId}/review`, {
+        const note = byId("actionNote").value.trim() || "Manual response action.";
+        await apiFetch(`/findings/${state.selectedFindingId}/action`, {
             method: "POST",
-            body: JSON.stringify({ status, note })
+            body: JSON.stringify({ action, note })
         });
-        await loadCase(state.selectedCaseId);
-        await loadCases();
+        await loadFinding(state.selectedFindingId);
+        await loadFindings();
     } catch (error) {
         alert(error.message);
     }
@@ -163,17 +162,17 @@ async function reviewSelectedCase(status) {
 
 function saveBaseUrl() {
     state.apiBaseUrl = byId("apiBaseUrl").value.trim();
-    localStorage.setItem("spend-inbox-api-base-url", state.apiBaseUrl);
+    localStorage.setItem("leak-guard-api-base-url", state.apiBaseUrl);
 }
 
 function boot() {
     byId("apiBaseUrl").value = state.apiBaseUrl;
     byId("saveBaseUrl").addEventListener("click", saveBaseUrl);
-    byId("refreshCases").addEventListener("click", loadCases);
-    byId("ingestSample").addEventListener("click", ingestSampleAlert);
-    byId("applyFilters").addEventListener("click", loadCases);
-    byId("acknowledgeCase").addEventListener("click", () => reviewSelectedCase("ACKNOWLEDGED"));
-    byId("resolveCase").addEventListener("click", () => reviewSelectedCase("RESOLVED"));
+    byId("refreshFindings").addEventListener("click", loadFindings);
+    byId("ingestSample").addEventListener("click", ingestSamplePush);
+    byId("applyFilters").addEventListener("click", loadFindings);
+    byId("disableKey").addEventListener("click", () => takeAction("DISABLE_KEY"));
+    byId("dismissFinding").addEventListener("click", () => takeAction("DISMISS"));
 }
 
 boot();

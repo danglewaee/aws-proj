@@ -1,3 +1,3 @@
-window.SPEND_INBOX_CONFIG = {
+window.LEAK_GUARD_CONFIG = {
     apiBaseUrl: ""
 };

@@ -1,0 +1,10 @@
+{
+  "ref": "refs/heads/main",
+  "before": "1111111111111111111111111111111111111111",
+  "after": "2222222222222222222222222222222222222222",
+  "compare": "https://github.com/acme/demo-repo/compare/1111111...2222222",
+  "repository": {
+    "full_name": "acme/demo-repo"
+  },
+  "inlineDiff": "diff --git a/app.py b/app.py\nindex 123..456 100644\n--- a/app.py\n+++ b/app.py\n@@ -1,3 +1,5 @@\n+AWS_ACCESS_KEY_ID = \"AKIAIOSFODNN7EXAMPLE\"\n"
+}

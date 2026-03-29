@@ -1,67 +1,45 @@
-# AWS Spend Inbox
+# LeakGuard
 
-`AWS Spend Inbox` is an AWS-first internal tool for catching unexpected cost alerts, turning them into review cases, and helping one engineer decide what to inspect first.
+`LeakGuard` is an AWS-first internal tool that detects leaked AWS access keys in GitHub push events, stores a redacted finding, and lets one operator disable the exposed key from a small response console.
 
 ## Why this project exists
 
-Small engineering teams do not struggle because AWS lacks billing data. They struggle because the signal is scattered across budgets, anomaly alerts, and optimization recommendations, and nobody knows what to review first when the bill jumps.
+Engineering teams do not struggle because they lack secret scanning vendors. They struggle because one leaked key in one commit can still turn into a live incident before anyone sees it.
 
-This project treats that as an inbox problem:
+This project treats that as a very small response workflow:
 
-- ingest AWS spend alerts through a small API
-- persist review cases in `DynamoDB`
-- archive raw alert payloads in `S3`
-- expose a small operator console for triage
-- let one operator acknowledge or resolve a case with an explicit note
+- receive a GitHub push webhook
+- fetch or accept the changed diff
+- detect high-confidence leaked AWS access key IDs
+- store one redacted finding in `DynamoDB`
+- archive evidence in `S3`
+- let one operator inspect and disable the key
 
 ## AWS-first stack
 
-- `API Gateway HTTP API` for alert ingress and operator APIs
-- `AWS Lambda (Python)` for ingest, listing, detail lookup, and case review
-- `DynamoDB` for case metadata and status tracking
-- `S3` for raw alert archival and review artifacts
+- `API Gateway HTTP API` for webhook ingress and operator APIs
+- `AWS Lambda (Python)` for ingest, listing, detail lookup, and disable actions
+- `DynamoDB` for finding metadata and status tracking
+- `S3` for raw webhook evidence and action artifacts
 - `CloudWatch Logs` for operational traceability
 - `AWS SAM` for infrastructure and deployment
 - `Static frontend` for the operator console
 
-## Why AWS fits
-
-This is not a generic analytics dashboard. It is a narrow AWS operations workflow:
-
-- `API Gateway` receives alerts from budgets, anomaly monitors, or manual intake
-- `Lambda` normalizes those alerts into small review cases
-- `DynamoDB` stores action status cheaply
-- `S3` provides forensic storage for the original alert payload
-
-That gives the project a clean single-vendor story instead of a mixed deployment narrative.
-
 ## MVP scope
 
-- receive alerts at `POST /alerts/{source}`
-- write raw alert payloads to `S3`
-- write review cases to `DynamoDB`
+- receive GitHub push webhooks at `POST /github/webhook`
+- verify `X-Hub-Signature-256` if a webhook secret is configured
+- detect `AWS_ACCESS_KEY_ID` patterns in diff text
+- persist findings to `DynamoDB`
 - expose:
-  - `GET /cases`
-  - `GET /cases/{caseId}`
-  - `POST /cases/{caseId}/review`
-- support case statuses:
-  - `NEW`
-  - `ACKNOWLEDGED`
-  - `RESOLVED`
+  - `GET /findings`
+  - `GET /findings/{findingId}`
+  - `POST /findings/{findingId}/action`
+- support finding statuses:
+  - `OPEN`
+  - `DISMISSED`
+  - `KEY_DISABLED`
 - provide a small operator console in `frontend/`
-
-## Repository layout
-
-```text
-aws-webhook-replay-console/
-  docs/
-  events/
-  frontend/
-  src/
-    handlers/
-    shared/
-  template.yaml
-```
 
 ## Quick start
 
@@ -85,12 +63,12 @@ sam deploy --guided
 sam local start-api
 ```
 
-Then post a sample alert:
+Then post a sample GitHub push payload:
 
 ```bash
-curl -X POST http://127.0.0.1:3000/alerts/anomaly-detection \
+curl -X POST http://127.0.0.1:3000/github/webhook \
   -H "content-type: application/json" \
-  -d @events/sample-cost-alert.json
+  -d @events/sample-github-push.json
 ```
 
 ### 4. Open the operator console
@@ -99,56 +77,46 @@ The static console is in `frontend/`. For a quick local view, serve it with any 
 
 ### 5. Publish the frontend to S3 website hosting
 
-You can host the operator console on AWS with a public S3 website endpoint:
-
 ```powershell
 $api = aws cloudformation describe-stacks `
-  --stack-name webhook-replay-console `
+  --stack-name leakguard `
   --region us-east-1 `
   --query "Stacks[0].Outputs[?OutputKey=='ApiBaseUrl'].OutputValue" `
   --output text
 
 powershell -ExecutionPolicy Bypass -File .\scripts\publish-frontend.ps1 `
-  -BucketName webhook-replay-console-frontend-873014949989 `
+  -BucketName leakguard-frontend-873014949989 `
   -ApiBaseUrl $api `
   -Region us-east-1
 ```
 
-This script:
+## Finding model
 
-- writes the API base URL into `frontend/config.js`
-- creates the bucket if needed
-- enables S3 website hosting
-- applies a public read bucket policy
-- uploads the static files
+Each finding tracks:
 
-## Case model
-
-Each case record tracks:
-
-- `caseId`
-- `title`
-- `source`
-- `service`
-- `severity`
-- `estimatedImpactUsd`
+- `findingId`
 - `status`
+- `repoFullName`
+- `branch`
+- `secretType`
+- `matchedKeyIdRedacted`
+- `iamUserName`
+- `compareUrl`
 - `receivedAt`
-- `lastUpdatedAt`
 - `payloadS3Key`
-- `reviewCount`
-- `lastReviewNote`
-- `owner`
+- `disableCount`
+- `lastActionNote`
 
 ## Current implementation notes
 
-- alerts can come from `budgets`, `anomaly-detection`, `compute-optimizer`, or `manual`
-- review currently means `ACKNOWLEDGED` or `RESOLVED`
-- automated enrichment from real AWS Cost APIs is intentionally left for a later iteration
+- `inlineDiff` can be provided in the payload to demo the flow without calling GitHub
+- if `GITHUB_TOKEN` is configured, the ingest function can fetch compare diffs from GitHub
+- disable is manual and opt-in through the console
+- the current detector intentionally focuses on one high-confidence pattern: long-term AWS access key IDs
 
 ## Next high-value steps
 
-1. Add direct ingestion from AWS Budgets and Cost Anomaly Detection
-2. Add owner assignment and saved views
-3. Replace list-case `scan` behavior with stricter indexed access patterns
-4. Add CloudWatch dashboards and cost review notifications
+1. Add delivery idempotency keyed by `X-GitHub-Delivery`
+2. Add `GetAccessKeyLastUsed` enrichment to the UI as a stronger triage signal
+3. Add allowlists so auto-disable can be enabled safely for specific IAM users
+4. Add SNS or digest notifications after the core response loop is stable

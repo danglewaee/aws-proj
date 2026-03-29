@@ -3,20 +3,20 @@
 ## Week 1
 
 - deploy `API Gateway`, `Lambda`, `DynamoDB`, and `S3`
-- accept spend alerts through `POST /alerts/{source}`
-- persist raw payloads and case metadata
+- accept GitHub push webhooks through `POST /github/webhook`
+- persist findings and archived evidence
 
 ## Week 2
 
-- finish operator console case list
-- add case detail behavior
-- filter by `status`, `source`, `service`, and `severity`
+- finish operator console list and detail flow
+- add diff-based AWS access key detection
+- display IAM username enrichment when the key exists
 
 ## Week 3
 
-- implement acknowledge and resolve actions
-- store review artifacts in `S3`
-- improve review notes and ownership fields
+- implement manual disable action
+- write audit artifacts to `S3`
+- improve finding states and notes
 
 ## Week 4
 
@@ -26,8 +26,8 @@
 
 ## Explicit non-goals for V1
 
-- multi-account FinOps platform
-- forecasting or custom anomaly models
-- automated shutdowns or remediation
-- Slack or email workflows
-- role-based access control
+- multi-provider secret scanning
+- entropy-heavy generic secret detection
+- automatic disable by default
+- long-running workflow orchestration
+- ticketing and enterprise notification workflows

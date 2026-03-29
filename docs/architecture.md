@@ -2,107 +2,85 @@
 
 ## One-line thesis
 
-`AWS Spend Inbox` is an AWS-native operator console for reviewing unexpected cost alerts and deciding what to inspect first.
+`LeakGuard` is an AWS-native response bot for leaked AWS access keys found in GitHub push events.
 
 ## Core user
 
-- startup founders watching the AWS bill directly
-- devops or platform engineers
-- backend leads who get asked why cloud spend suddenly jumped
+- platform and security-minded backend engineers
+- small dev teams without a full secret scanning workflow
+- anyone who needs to answer "did we just leak a live AWS key?"
 
 ## Main pain
 
-- cost alerts arrive, but nobody knows what to look at first
-- budgets, anomaly alerts, and optimization recommendations live in different places
-- teams need one place to record "we saw this" and "we fixed this"
+- a leaked key can stay active until someone notices it
+- teams lose time searching diffs, logs, and IAM consoles separately
+- many tools stop at detection and do not close the loop on AWS credentials
 
 ## AWS architecture
 
 ```mermaid
 flowchart LR
-    A["AWS Budgets / Cost alerts / Manual intake"] --> B["API Gateway HTTP API"]
-    B --> C["Lambda: ingest alert"]
-    C --> D["DynamoDB: spend cases"]
-    C --> E["S3: alert archive"]
-    F["Operator console"] --> B
-    B --> G["Lambda: list cases"]
-    B --> H["Lambda: get case"]
-    B --> I["Lambda: review case"]
-    I --> D
-    I --> E
-    C --> J["CloudWatch Logs"]
-    G --> J
-    H --> J
-    I --> J
+    A["GitHub push webhook"] --> B["API Gateway HTTP API"]
+    B --> C["Lambda: ingest webhook"]
+    C --> D["DynamoDB: leak findings"]
+    C --> E["S3: evidence archive"]
+    C --> F["IAM: GetAccessKeyLastUsed"]
+    G["Operator console"] --> B
+    B --> H["Lambda: list findings"]
+    B --> I["Lambda: get finding"]
+    B --> J["Lambda: action finding"]
+    J --> D
+    J --> E
+    J --> K["IAM: UpdateAccessKey"]
 ```
 
 ## Resource responsibilities
 
 ### API Gateway
 
-- accepts alert ingestion requests
-- exposes operator-facing endpoints for list, detail, and review
+- receives GitHub webhook calls
+- exposes operator-facing endpoints for list, detail, and manual actions
 
 ### Lambda ingest
 
-- accepts an alert payload
-- normalizes it into a small spend review case
-- stores raw alert payload in `S3`
-- stores case metadata in `DynamoDB`
+- verifies webhook signature when a shared secret is configured
+- fetches or reads diff text
+- runs a high-confidence detector for AWS access key IDs
+- stores findings in `DynamoDB`
+- archives evidence in `S3`
+- enriches findings with IAM key metadata when possible
 
 ### DynamoDB
 
-Stores case status and review state:
+Stores:
 
-- case identifier
+- finding id
 - status
-- source
-- service
-- severity
-- estimated impact
-- review note and timestamps
+- repository and branch
+- redacted key id
+- IAM user name
+- timestamps
+- action counts
 
 ### S3
 
 Stores:
 
-- raw alert payloads
-- review artifacts
+- raw webhook payloads
+- action audit artifacts
 
-### Operator console
+### Action function
 
-Provides:
-
-- case list
-- case detail
-- acknowledge and resolve actions
-- quick API base configuration
-
-## Data model
-
-### Table: `spend-cases`
-
-- primary key: `caseId`
-- global secondary index:
-  - partition key: `status`
-  - sort key: `receivedAt`
-
-### Typical state transitions
-
-```text
-NEW -> ACKNOWLEDGED
-NEW -> RESOLVED
-ACKNOWLEDGED -> RESOLVED
-```
+- disables an exposed IAM access key on operator request
+- records audit state back into `DynamoDB`
 
 ## Honest scope boundary
 
-This scaffold intentionally stops short of:
+This prototype intentionally does not try to be:
 
-- live ingestion from actual AWS Cost APIs
-- account-wide forecasting
-- automated remediation
-- multi-account organization rollups
-- full auth and RBAC
+- a full secret scanning platform
+- a GitHub Advanced Security replacement
+- a multi-provider secret detector
+- an automatic remediation engine by default
 
-Those belong in the next iteration, after the review workflow is stable.
+It focuses on one painful workflow: detect a leaked AWS key and respond fast.

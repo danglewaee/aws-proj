@@ -24,3 +24,7 @@ def bad_request(message):
 
 def not_found(message):
     return json_response(404, {"message": message})
+
+
+def unauthorized(message):
+    return json_response(401, {"message": message})
