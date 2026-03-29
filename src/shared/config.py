@@ -5,6 +5,10 @@ def findings_table_name():
     return os.environ["LEAK_FINDINGS_TABLE"]
 
 
+def deliveries_table_name():
+    return os.environ["DELIVERIES_TABLE"]
+
+
 def evidence_bucket_name():
     return os.environ["EVIDENCE_BUCKET"]
 
@@ -23,6 +27,10 @@ def github_token():
 
 def alert_topic_arn():
     return os.environ.get("ALERT_TOPIC_ARN", "")
+
+
+def delivery_ttl_days():
+    return int(os.environ.get("DELIVERY_TTL_DAYS", "14"))
 
 
 def disable_allowlist_users():

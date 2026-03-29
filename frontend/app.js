@@ -8,6 +8,9 @@ const state = {
     selectedFinding: null,
     findings: []
 };
+const sampleDeliveryId = (window.crypto && window.crypto.randomUUID)
+    ? `sample-${window.crypto.randomUUID()}`
+    : `sample-${Date.now()}`;
 
 const samplePush = {
     ref: "refs/heads/main",
@@ -142,6 +145,10 @@ async function ingestSamplePush() {
     try {
         await apiFetch("/github/webhook", {
             method: "POST",
+            headers: {
+                "x-github-delivery": sampleDeliveryId,
+                "x-github-event": "push"
+            },
             body: JSON.stringify(samplePush)
         });
         await loadFindings();
