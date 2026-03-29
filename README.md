@@ -9,7 +9,8 @@ Engineering teams do not struggle because they lack secret scanning vendors. The
 This project treats that as a very small response workflow:
 
 - receive a GitHub push webhook
-- fetch or accept the changed diff
+- verify the delivery and queue it for scan
+- fetch the changed diff in a worker
 - detect high-confidence leaked AWS access key IDs
 - store one redacted finding in `DynamoDB`
 - archive evidence in `S3`
@@ -20,7 +21,8 @@ This project treats that as a very small response workflow:
 ## AWS-first stack
 
 - `API Gateway HTTP API` for webhook ingress and operator APIs
-- `AWS Lambda (Python)` for ingest, listing, detail lookup, and disable actions
+- `AWS Lambda (Python)` for ingest, queue workers, listing, detail lookup, and disable actions
+- `SQS` to decouple webhook acknowledgement from diff scanning
 - `DynamoDB` for finding metadata and status tracking
 - `DynamoDB` delivery dedupe table with TTL for GitHub webhook replay protection
 - `S3` for raw webhook evidence and action artifacts
@@ -33,6 +35,7 @@ This project treats that as a very small response workflow:
 
 - receive GitHub push webhooks at `POST /github/webhook`
 - require `X-GitHub-Delivery` so each GitHub delivery can be deduplicated
+- acknowledge the webhook quickly and enqueue a scan job
 - verify `X-Hub-Signature-256` if a webhook secret is configured
 - detect `AWS_ACCESS_KEY_ID` patterns in diff text
 - persist findings to `DynamoDB`
@@ -131,6 +134,7 @@ Each finding tracks:
 - `inlineDiff` can be provided in the payload to demo the flow without calling GitHub
 - if `GITHUB_TOKEN` is configured, the ingest function can fetch compare diffs from GitHub
 - GitHub deliveries are deduplicated in a separate DynamoDB table with TTL
+- webhook ingress now only validates and enqueues; the SQS worker performs diff scanning and finding creation
 - disable is manual, opt-in, and requires explicit confirmation in the console
 - `DISABLE_ALLOWLIST_USERS` can restrict which IAM users are eligible for key disable
 - `AlertEmailEndpoint` creates an SNS email subscription and enables per-finding alert publishing
@@ -138,7 +142,7 @@ Each finding tracks:
 
 ## Next high-value steps
 
-1. Move diff scanning out of the ingress Lambda and into a worker path so GitHub webhook acks stay fast
-2. Add delivery-level audit search so one operator can review what the same GitHub webhook triggered over time
+1. Add delivery-level audit search so one operator can review what the same GitHub webhook triggered over time
+2. Add a dead-letter queue and replay path for failed scans
 3. Add a second notification channel only after SNS email stays low-noise
 4. Add a second detector for short-lived cloud credentials only after the AWS key flow is rock solid

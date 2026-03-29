@@ -38,6 +38,12 @@ function normalizedBaseUrl() {
     return (state.apiBaseUrl || "").replace(/\/$/, "");
 }
 
+function wait(ms) {
+    return new Promise((resolve) => {
+        window.setTimeout(resolve, ms);
+    });
+}
+
 function renderFindings() {
     const list = byId("findingList");
     const count = byId("findingCount");
@@ -151,6 +157,7 @@ async function ingestSamplePush() {
             },
             body: JSON.stringify(samplePush)
         });
+        await wait(1200);
         await loadFindings();
     } catch (error) {
         alert(error.message);
