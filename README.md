@@ -77,6 +77,8 @@ If `sam deploy --guided` asks for `GitHubWebhookSecret`, enter the webhook secre
 
 If `sam deploy --guided` asks for `AutoDisableMode`, leave it as `OFF` for a detect-only deployment. Set it to `ALLOWLIST_HIGH_CONFIDENCE` only when you want LeakGuard to auto-disable verified leaked keys for IAM users that also pass the configured disable allowlist.
 
+If `sam deploy --guided` asks for `LogRetentionDays`, leave it at `14` unless you explicitly want shorter or longer CloudWatch retention for the Lambda log groups.
+
 ### 3. Run locally
 
 ```bash
@@ -152,11 +154,13 @@ Each finding tracks:
 - `AlertEmailEndpoint` creates an SNS email subscription and enables per-finding alert publishing
 - the operator console now includes a delivery audit view so the same GitHub delivery can be inspected before or after finding creation
 - failed scan deliveries move through an SQS dead-letter queue and can be re-queued from the delivery audit view
+- each Lambda log group is created with an explicit retention window instead of defaulting to indefinite CloudWatch storage
+- CloudWatch alarms now surface scan worker errors and deliveries that accumulate in the scan DLQ
 - the current detector intentionally focuses on one high-confidence pattern: long-term AWS access key IDs
 
 ## Next high-value steps
 
 1. Complete the real GitHub webhook loop with a configured webhook secret and compare API token
-2. Add CloudWatch alarms and retention defaults that make free-tier guardrails visible
+2. Add batched or digest-style alerting only if per-finding SNS alerts start to feel noisy
 3. Add a second notification channel only after SNS email stays low-noise
 4. Add a second detector for short-lived cloud credentials only after the AWS key flow is rock solid

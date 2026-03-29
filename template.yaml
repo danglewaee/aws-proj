@@ -3,6 +3,14 @@ Transform: AWS::Serverless-2016-10-31
 Description: AWS-first LeakGuard prototype
 
 Parameters:
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues:
+      - 7
+      - 14
+      - 30
+    Description: CloudWatch Logs retention for LeakGuard Lambda functions.
   AlertEmailEndpoint:
     Type: String
     Default: ""
@@ -205,6 +213,100 @@ Resources:
             Queue: !GetAtt LeakGuardScanDlq.Arn
             BatchSize: 5
 
+  IngestFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${IngestFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ScanWorkerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ScanWorkerFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ScanDlqRecorderFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ScanDlqRecorderFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ListEventsFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ListEventsFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ListDeliveriesFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ListDeliveriesFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  GetEventFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${GetEventFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  GetDeliveryFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${GetDeliveryFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  RetryDeliveryFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${RetryDeliveryFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ReplayFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ReplayFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ScanWorkerErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: LeakGuard scan worker reported one or more Lambda errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ScanWorkerFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlertEmailEndpoint
+        - [!Ref LeakGuardAlertsTopic]
+        - !Ref AWS::NoValue
+
+  ScanDlqVisibleMessagesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: LeakGuard deliveries reached the scan dead-letter queue.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt LeakGuardScanDlq.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlertEmailEndpoint
+        - [!Ref LeakGuardAlertsTopic]
+        - !Ref AWS::NoValue
+
   ListEventsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -340,6 +442,14 @@ Outputs:
   ScanDlqUrl:
     Description: Dead-letter queue used for deliveries that exceed scan retry limits.
     Value: !Ref LeakGuardScanDlq
+
+  ScanWorkerErrorsAlarmName:
+    Description: CloudWatch alarm for scan worker Lambda errors.
+    Value: !Ref ScanWorkerErrorsAlarm
+
+  ScanDlqVisibleMessagesAlarmName:
+    Description: CloudWatch alarm for deliveries that reach the scan dead-letter queue.
+    Value: !Ref ScanDlqVisibleMessagesAlarm
 
   AlertTopicArn:
     Description: SNS topic used for finding alerts.
