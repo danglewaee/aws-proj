@@ -114,6 +114,34 @@ powershell -ExecutionPolicy Bypass -File .\scripts\publish-frontend.ps1 `
   -Region us-east-1
 ```
 
+### 6. Switch from sample mode to a real GitHub webhook
+
+Print the exact GitHub webhook target from the deployed stack:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\print-github-webhook-config.ps1 `
+  -StackName leakguard `
+  -Region us-east-1
+```
+
+Then configure one GitHub test repository like this:
+
+- create a fine-grained GitHub personal access token with `Contents: Read-only`
+- redeploy LeakGuard with:
+  - `GitHubWebhookSecret` set to your chosen webhook secret
+  - `GitHubToken` set to the fine-grained token
+- in GitHub repo settings, add a webhook with:
+  - `Payload URL = https://.../github/webhook`
+  - `Content type = application/json`
+  - `Secret = same value as GitHubWebhookSecret`
+  - `Just the push event`
+
+When a real push succeeds, LeakGuard should create:
+
+- one delivery with a non-sample `X-GitHub-Delivery`
+- one or more findings with `Diff source = GITHUB_COMPARE_API`
+- optional SNS alerting if `AlertEmailEndpoint` is configured and confirmed
+
 ## Finding model
 
 Each finding tracks:
