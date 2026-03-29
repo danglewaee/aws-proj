@@ -70,6 +70,8 @@ sam deploy --guided
 
 If `sam deploy --guided` asks for `AlertEmailEndpoint`, enter an email address to receive one alert email per new finding. Leave it blank to keep alerting disabled. If you do enter an email, AWS SNS will send a subscription confirmation message that must be accepted before alerts are delivered.
 
+If `sam deploy --guided` asks for `GitHubWebhookSecret`, enter the webhook secret configured in your GitHub repository or organization. If it asks for `GitHubToken`, enter a GitHub token with permission to call the compare API for the target repository. With a token configured, LeakGuard treats the GitHub compare API as the primary diff source and only falls back to `inlineDiff` when the compare request fails.
+
 ### 3. Run locally
 
 ```bash
@@ -131,10 +133,11 @@ Each finding tracks:
 
 ## Current implementation notes
 
-- `inlineDiff` can be provided in the payload to demo the flow without calling GitHub
-- if `GITHUB_TOKEN` is configured, the ingest function can fetch compare diffs from GitHub
+- `GitHub compare API` is the primary diff source when `GITHUB_TOKEN` is configured
+- `inlineDiff` is only a demo and fallback path if the compare request fails or the token is intentionally omitted
 - GitHub deliveries are deduplicated in a separate DynamoDB table with TTL
 - webhook ingress now only validates and enqueues; the SQS worker performs diff scanning and finding creation
+- findings record `diffSource` so operators can see whether a case came from a real compare API fetch or a demo fallback
 - disable is manual, opt-in, and requires explicit confirmation in the console
 - `DISABLE_ALLOWLIST_USERS` can restrict which IAM users are eligible for key disable
 - `AlertEmailEndpoint` creates an SNS email subscription and enables per-finding alert publishing

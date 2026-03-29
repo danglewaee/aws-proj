@@ -7,6 +7,16 @@ Parameters:
     Type: String
     Default: ""
     Description: Optional email address subscribed to LeakGuard SNS alerts.
+  GitHubWebhookSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional GitHub webhook secret used to verify X-Hub-Signature-256.
+  GitHubToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional GitHub token for Compare API calls. Leave blank to use demo inline diffs only.
 
 Conditions:
   HasAlertEmailEndpoint: !Not [!Equals [!Ref AlertEmailEndpoint, ""]]
@@ -25,8 +35,8 @@ Globals:
         SCAN_QUEUE_URL: !Ref LeakGuardScanQueue
         STATUS_INDEX_NAME: status-receivedAt-index
         DELIVERY_TTL_DAYS: "14"
-        GITHUB_WEBHOOK_SECRET: ""
-        GITHUB_TOKEN: ""
+        GITHUB_WEBHOOK_SECRET: !Ref GitHubWebhookSecret
+        GITHUB_TOKEN: !Ref GitHubToken
         DISABLE_ALLOWLIST_USERS: ""
         ALERT_TOPIC_ARN: !If [HasAlertEmailEndpoint, !Ref LeakGuardAlertsTopic, ""]
 

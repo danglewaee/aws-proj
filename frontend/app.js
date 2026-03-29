@@ -58,9 +58,10 @@ function renderFindings() {
     state.findings.forEach((item) => {
         const row = document.createElement("article");
         row.className = "event-row";
+        const diffSource = item.diffSource || "UNKNOWN";
         row.innerHTML = `
             <div class="event-title">${item.matchedKeyIdRedacted || "unknown key"} <span class="pill">${item.status}</span></div>
-            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.secretType || "unknown"} | ${item.severity || "UNKNOWN"} | alert ${item.alertStatus || "UNKNOWN"} | ${item.iamUserName || "unresolved user"} | ${item.receivedAt}</div>
+            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.secretType || "unknown"} | ${item.severity || "UNKNOWN"} | ${diffSource} | alert ${item.alertStatus || "UNKNOWN"} | ${item.iamUserName || "unresolved user"} | ${item.receivedAt}</div>
             <button class="secondary" data-finding-id="${item.findingId}">Inspect</button>
         `;
         row.querySelector("button").addEventListener("click", () => loadFinding(item.findingId));
@@ -83,6 +84,7 @@ function renderDetail(payload) {
     byId("detailKeyId").textContent = item.matchedKeyIdRedacted || "-";
     byId("detailUser").textContent = item.iamUserName || "not resolved";
     byId("detailCompareUrl").textContent = item.compareUrl || "-";
+    byId("detailDiffSource").textContent = item.diffSource || "UNKNOWN";
     byId("detailLastUsedService").textContent = item.lastUsedService || "unknown";
     byId("detailDeliveryId").textContent = item.deliveryId || "-";
     byId("detailDisableEligibility").textContent = item.disableEligible ? "ELIGIBLE" : "BLOCKED";

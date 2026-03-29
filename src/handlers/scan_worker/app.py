@@ -42,6 +42,7 @@ def _store_finding(table, delivery_id, compare_summary, payload_key, finding, al
         "repoFullName": compare_summary["repoFullName"],
         "branch": compare_summary["branch"] or "unknown",
         "compareUrl": compare_summary["compareUrl"],
+        "diffSource": compare_summary["diffSource"],
         "beforeSha": compare_summary["before"] or "unknown",
         "afterSha": compare_summary["after"] or "unknown",
         "matchedKeyIdRedacted": finding["matchedKeyIdRedacted"],
@@ -115,14 +116,25 @@ def _process_delivery(message):
         "LeakGuard worker started scanning this GitHub delivery.",
     )
 
-    diff_text = fetch_compare_diff(payload)
+    diff_result = fetch_compare_diff(payload)
+    compare_summary["diffSource"] = diff_result["source"]
+    diff_text = diff_result["diffText"]
     findings = extract_aws_access_key_findings(diff_text)
+    if not diff_text:
+        update_delivery_status(
+            delivery_id,
+            "SCAN_FAILED",
+            0,
+            f"LeakGuard could not load a diff for scanning. Source={diff_result['source']}. {diff_result['error']}",
+        )
+        return
+
     if not findings:
         update_delivery_status(
             delivery_id,
             "PROCESSED_NO_FINDINGS",
             0,
-            "No leaked AWS access key IDs detected in this delivery.",
+            f"No leaked AWS access key IDs detected in this delivery. Diff source={diff_result['source']}.",
         )
         return
 
@@ -145,7 +157,7 @@ def _process_delivery(message):
         delivery_id,
         "FINDINGS_CREATED",
         len(stored),
-        "LeakGuard stored findings for this GitHub push delivery.",
+        f"LeakGuard stored findings for this GitHub push delivery. Diff source={diff_result['source']}.",
     )
 
 
