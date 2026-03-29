@@ -2,6 +2,15 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: AWS-first LeakGuard prototype
 
+Parameters:
+  AlertEmailEndpoint:
+    Type: String
+    Default: ""
+    Description: Optional email address subscribed to LeakGuard SNS alerts.
+
+Conditions:
+  HasAlertEmailEndpoint: !Not [!Equals [!Ref AlertEmailEndpoint, ""]]
+
 Globals:
   Function:
     Runtime: python3.12
@@ -15,6 +24,8 @@ Globals:
         STATUS_INDEX_NAME: status-receivedAt-index
         GITHUB_WEBHOOK_SECRET: ""
         GITHUB_TOKEN: ""
+        DISABLE_ALLOWLIST_USERS: ""
+        ALERT_TOPIC_ARN: !If [HasAlertEmailEndpoint, !Ref LeakGuardAlertsTopic, ""]
 
 Resources:
   LeakGuardApi:
@@ -38,6 +49,19 @@ Resources:
     Properties:
       VersioningConfiguration:
         Status: Enabled
+
+  LeakGuardAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-alerts"
+
+  LeakGuardAlertsEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmailEndpoint
+    Properties:
+      Protocol: email
+      Endpoint: !Ref AlertEmailEndpoint
+      TopicArn: !Ref LeakGuardAlertsTopic
 
   LeakFindingsTable:
     Type: AWS::DynamoDB::Table
@@ -78,6 +102,10 @@ Resources:
               Action:
                 - iam:GetAccessKeyLastUsed
               Resource: "*"
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref LeakGuardAlertsTopic
       Events:
         GitHubWebhook:
           Type: HttpApi
@@ -155,3 +183,7 @@ Outputs:
   LeakFindingsTableName:
     Description: DynamoDB table storing leak findings and status changes.
     Value: !Ref LeakFindingsTable
+
+  AlertTopicArn:
+    Description: SNS topic used for finding alerts.
+    Value: !Ref LeakGuardAlertsTopic

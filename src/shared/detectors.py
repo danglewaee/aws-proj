@@ -27,6 +27,8 @@ def extract_aws_access_key_findings(diff_text):
                     "matchedKeyId": match,
                     "matchedKeyIdRedacted": redact_secret(match),
                     "evidenceSnippet": line[:500],
+                    "severity": "HIGH",
+                    "confidence": "HIGH",
                 }
             )
 

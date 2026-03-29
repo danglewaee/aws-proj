@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from shared.config import evidence_bucket_name, findings_table_name
+from shared.config import disable_allowlist_users, evidence_bucket_name, findings_table_name
 from shared.dynamo import deserialize_item, table_resource
 from shared.http import bad_request, not_found, json_response
 from shared.iam_keys import disable_access_key
@@ -16,6 +16,7 @@ def lambda_handler(event, context):
     body = json.loads(event.get("body") or "{}")
     action = (body.get("action") or "").upper()
     note = body.get("note", "Manual response action.")
+    confirmed = bool(body.get("confirmed"))
     acted_at = datetime.now(timezone.utc).isoformat()
 
     if action not in {"DISABLE_KEY", "DISMISS"}:
@@ -29,14 +30,31 @@ def lambda_handler(event, context):
 
     new_status = "DISMISSED"
     disable_count = int(item.get("disableCount", 0))
+    action_history = list(item.get("actionHistory", []))
     if action == "DISABLE_KEY":
+        if not confirmed:
+            return bad_request("Disable key action requires explicit confirmation.")
         user_name = item.get("iamUserName")
         access_key_id = item.get("matchedKeyId")
         if not user_name or not access_key_id:
             return bad_request("Finding does not have enough IAM data to disable a key.")
+        allowed_users = disable_allowlist_users()
+        if allowed_users and user_name not in allowed_users:
+            return bad_request("IAM user is outside the configured disable allowlist.")
+        if not item.get("disableEligible", False):
+            return bad_request("Finding is not currently eligible for key disable.")
         disable_access_key(user_name, access_key_id)
         disable_count += 1
         new_status = "KEY_DISABLED"
+
+    action_history.append(
+        {
+            "action": action,
+            "actedAt": acted_at,
+            "note": note,
+            "confirmed": confirmed,
+        }
+    )
 
     audit_key = f"actions/{item.get('repoFullName', 'unknown').replace('/', '__')}/{acted_at}/{finding_id}.json"
     s3_client.put_object(
@@ -47,6 +65,7 @@ def lambda_handler(event, context):
                 "findingId": finding_id,
                 "action": action,
                 "note": note,
+                "confirmed": confirmed,
                 "actedAt": acted_at,
             }
         ).encode("utf-8"),
@@ -57,7 +76,7 @@ def lambda_handler(event, context):
         Key={"eventId": finding_id},
         UpdateExpression=(
             "SET #status = :status, lastUpdatedAt = :acted_at, lastActionNote = :note, "
-            "disableCount = :disable_count"
+            "disableCount = :disable_count, actionHistory = :action_history"
         ),
         ExpressionAttributeNames={"#status": "status"},
         ExpressionAttributeValues={
@@ -65,6 +84,7 @@ def lambda_handler(event, context):
             ":acted_at": acted_at,
             ":note": note,
             ":disable_count": disable_count,
+            ":action_history": action_history,
         },
     )
 

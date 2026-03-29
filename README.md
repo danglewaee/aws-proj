@@ -13,7 +13,9 @@ This project treats that as a very small response workflow:
 - detect high-confidence leaked AWS access key IDs
 - store one redacted finding in `DynamoDB`
 - archive evidence in `S3`
+- publish one SNS alert if an email subscriber is configured
 - let one operator inspect and disable the key
+- keep a tiny action history for every finding
 
 ## AWS-first stack
 
@@ -21,6 +23,7 @@ This project treats that as a very small response workflow:
 - `AWS Lambda (Python)` for ingest, listing, detail lookup, and disable actions
 - `DynamoDB` for finding metadata and status tracking
 - `S3` for raw webhook evidence and action artifacts
+- `SNS` for optional finding alerts
 - `CloudWatch Logs` for operational traceability
 - `AWS SAM` for infrastructure and deployment
 - `Static frontend` for the operator console
@@ -31,6 +34,9 @@ This project treats that as a very small response workflow:
 - verify `X-Hub-Signature-256` if a webhook secret is configured
 - detect `AWS_ACCESS_KEY_ID` patterns in diff text
 - persist findings to `DynamoDB`
+- assign a simple `severity` and `confidence`
+- enforce a disable allowlist if the team configures one
+- publish an optional SNS email alert for each new finding
 - expose:
   - `GET /findings`
   - `GET /findings/{findingId}`
@@ -56,6 +62,8 @@ This project treats that as a very small response workflow:
 sam build
 sam deploy --guided
 ```
+
+If `sam deploy --guided` asks for `AlertEmailEndpoint`, enter an email address to receive one alert email per new finding. Leave it blank to keep alerting disabled. If you do enter an email, AWS SNS will send a subscription confirmation message that must be accepted before alerts are delivered.
 
 ### 3. Run locally
 
@@ -101,22 +109,30 @@ Each finding tracks:
 - `secretType`
 - `matchedKeyIdRedacted`
 - `iamUserName`
+- `severity`
+- `confidence`
 - `compareUrl`
 - `receivedAt`
 - `payloadS3Key`
 - `disableCount`
 - `lastActionNote`
+- `actionHistory`
+- `disableEligible`
+- `alertStatus`
+- `alertChannel`
 
 ## Current implementation notes
 
 - `inlineDiff` can be provided in the payload to demo the flow without calling GitHub
 - if `GITHUB_TOKEN` is configured, the ingest function can fetch compare diffs from GitHub
-- disable is manual and opt-in through the console
+- disable is manual, opt-in, and requires explicit confirmation in the console
+- `DISABLE_ALLOWLIST_USERS` can restrict which IAM users are eligible for key disable
+- `AlertEmailEndpoint` creates an SNS email subscription and enables per-finding alert publishing
 - the current detector intentionally focuses on one high-confidence pattern: long-term AWS access key IDs
 
 ## Next high-value steps
 
-1. Add delivery idempotency keyed by `X-GitHub-Delivery`
-2. Add `GetAccessKeyLastUsed` enrichment to the UI as a stronger triage signal
-3. Add allowlists so auto-disable can be enabled safely for specific IAM users
-4. Add SNS or digest notifications after the core response loop is stable
+1. Add a stricter duplicate model for repeated pushes touching the same key across separate deliveries
+2. Add delivery-level audit search so one operator can review what the same GitHub webhook triggered over time
+3. Add a second notification channel only after SNS email stays low-noise
+4. Add a second detector for short-lived cloud credentials only after the AWS key flow is rock solid

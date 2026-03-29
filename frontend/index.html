@@ -77,16 +77,24 @@
                     <strong id="detailSecretType">-</strong>
                 </article>
                 <article class="detail-card">
-                    <span class="detail-label">Key ID</span>
-                    <strong id="detailKeyId">-</strong>
+                    <span class="detail-label">Severity</span>
+                    <strong id="detailSeverity">-</strong>
                 </article>
                 <article class="detail-card">
-                    <span class="detail-label">IAM user</span>
-                    <strong id="detailUser">-</strong>
+                    <span class="detail-label">Confidence</span>
+                    <strong id="detailConfidence">-</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Key ID</span>
+                    <strong id="detailKeyId">-</strong>
                 </article>
             </div>
 
             <div class="detail-grid">
+                <article class="detail-card">
+                    <span class="detail-label">IAM user</span>
+                    <strong id="detailUser">-</strong>
+                </article>
                 <article class="detail-card">
                     <span class="detail-label">Compare URL</span>
                     <strong id="detailCompareUrl">-</strong>
@@ -95,10 +103,28 @@
                     <span class="detail-label">Last used service</span>
                     <strong id="detailLastUsedService">-</strong>
                 </article>
+                <article class="detail-card">
+                    <span class="detail-label">Delivery ID</span>
+                    <strong id="detailDeliveryId">-</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Disable eligibility</span>
+                    <strong id="detailDisableEligibility">-</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Alert status</span>
+                    <strong id="detailAlertStatus">-</strong>
+                </article>
+                <article class="detail-card">
+                    <span class="detail-label">Alert channel</span>
+                    <strong id="detailAlertChannel">-</strong>
+                </article>
             </div>
 
             <label for="actionNote">Action note</label>
             <input id="actionNote" type="text" placeholder="Confirmed the key belongs to a test IAM user">
+            <label for="disableConfirm">Type DISABLE_KEY to confirm</label>
+            <input id="disableConfirm" type="text" placeholder="DISABLE_KEY">
             <div class="hero-actions">
                 <button id="disableKey">Disable selected key</button>
                 <button id="dismissFinding" class="secondary">Dismiss finding</button>
@@ -107,6 +133,11 @@
             <div class="payload-panel">
                 <p class="section-label">Evidence</p>
                 <pre id="payloadView">Select a finding to inspect the redacted webhook payload.</pre>
+            </div>
+
+            <div class="payload-panel">
+                <p class="section-label">Action history</p>
+                <pre id="historyView">No actions recorded yet.</pre>
             </div>
         </section>
     </main>

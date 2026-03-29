@@ -19,3 +19,14 @@ def github_webhook_secret():
 
 def github_token():
     return os.environ.get("GITHUB_TOKEN", "")
+
+
+def alert_topic_arn():
+    return os.environ.get("ALERT_TOPIC_ARN", "")
+
+
+def disable_allowlist_users():
+    raw_value = os.environ.get("DISABLE_ALLOWLIST_USERS", "")
+    if not raw_value.strip():
+        return set()
+    return {part.strip() for part in raw_value.split(",") if part.strip()}

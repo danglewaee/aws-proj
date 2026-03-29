@@ -5,7 +5,13 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from shared.config import evidence_bucket_name, findings_table_name, github_webhook_secret
+from shared.alerts import publish_finding_alert
+from shared.config import (
+    disable_allowlist_users,
+    evidence_bucket_name,
+    findings_table_name,
+    github_webhook_secret,
+)
 from shared.detectors import extract_aws_access_key_findings
 from shared.dynamo import deserialize_item, table_resource
 from shared.github_diff import fetch_compare_diff, raw_payload_bytes, summarize_compare_window
@@ -51,6 +57,7 @@ def _archive_payload(repo_name, finding_id, payload):
 
 
 def lambda_handler(event, context):
+    headers = event.get("headers") or {}
     raw_body = _read_body(event)
     if not raw_body:
         return bad_request("Webhook body must not be empty.")
@@ -74,13 +81,23 @@ def lambda_handler(event, context):
 
     repo_name = compare_summary["repoFullName"].replace("/", "__")
     table = table_resource(findings_table_name())
+    delivery_id = headers.get("x-github-delivery") or headers.get("X-GitHub-Delivery")
+    allowed_users = disable_allowlist_users()
     stored = []
 
     for finding in findings:
-        finding_id = str(uuid.uuid4())
+        finding_id = (
+            f"{delivery_id}#{finding['matchedKeyId']}"
+            if delivery_id
+            else str(uuid.uuid4())
+        )
         received_at = datetime.now(timezone.utc).isoformat()
         key_details = get_access_key_details(finding["matchedKeyId"])
         payload_key = _archive_payload(repo_name, finding_id, payload)
+        iam_user_name = key_details["userName"]
+        disable_eligible = bool(iam_user_name and key_details["exists"])
+        if allowed_users:
+            disable_eligible = disable_eligible and iam_user_name in allowed_users
 
         item = {
             "eventId": finding_id,
@@ -88,7 +105,10 @@ def lambda_handler(event, context):
             "status": "OPEN",
             "receivedAt": received_at,
             "lastUpdatedAt": received_at,
+            "deliveryId": delivery_id or finding_id,
             "secretType": finding["secretType"],
+            "severity": finding["severity"],
+            "confidence": finding["confidence"],
             "repoFullName": compare_summary["repoFullName"],
             "branch": compare_summary["branch"] or "unknown",
             "compareUrl": compare_summary["compareUrl"],
@@ -96,16 +116,58 @@ def lambda_handler(event, context):
             "afterSha": compare_summary["after"] or "unknown",
             "matchedKeyIdRedacted": finding["matchedKeyIdRedacted"],
             "matchedKeyId": finding["matchedKeyId"],
-            "iamUserName": key_details["userName"],
+            "iamUserName": iam_user_name,
             "keyExists": key_details["exists"],
             "lastUsedService": str(key_details["serviceName"] or ""),
             "lastUsedRegion": str(key_details["region"] or ""),
             "evidenceSnippet": finding["evidenceSnippet"],
             "payloadS3Key": payload_key,
             "disableCount": 0,
+            "disableEligible": disable_eligible,
+            "disableAllowlistApplied": bool(allowed_users),
             "lastActionNote": None,
+            "confirmationRequired": True,
+            "alertStatus": "PENDING",
+            "alertChannel": "SNS",
+            "alertPublishedAt": "",
+            "alertMessageId": "",
+            "alertError": "",
+            "actionHistory": [
+                {
+                    "action": "DETECTED",
+                    "actedAt": received_at,
+                    "note": "LeakGuard detected a high-confidence AWS access key pattern in this push.",
+                }
+            ],
         }
-        table.put_item(Item=item)
+        try:
+            table.put_item(
+                Item=item,
+                ConditionExpression="attribute_not_exists(eventId)",
+            )
+        except Exception:
+            continue
+        alert_result = publish_finding_alert(item)
+        item["alertStatus"] = alert_result["status"]
+        item["alertChannel"] = alert_result["channel"]
+        item["alertPublishedAt"] = alert_result["publishedAt"]
+        item["alertMessageId"] = alert_result["messageId"]
+        item["alertError"] = alert_result["error"]
+        table.update_item(
+            Key={"eventId": finding_id},
+            UpdateExpression=(
+                "SET alertStatus = :alert_status, alertChannel = :alert_channel, "
+                "alertPublishedAt = :alert_published_at, alertMessageId = :alert_message_id, "
+                "alertError = :alert_error"
+            ),
+            ExpressionAttributeValues={
+                ":alert_status": item["alertStatus"],
+                ":alert_channel": item["alertChannel"],
+                ":alert_published_at": item["alertPublishedAt"],
+                ":alert_message_id": item["alertMessageId"],
+                ":alert_error": item["alertError"],
+            },
+        )
         stored.append(deserialize_item(item))
 
     return json_response(

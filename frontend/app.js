@@ -5,6 +5,7 @@ const savedBaseUrl = localStorage.getItem("leak-guard-api-base-url") || configur
 const state = {
     apiBaseUrl: savedBaseUrl,
     selectedFindingId: null,
+    selectedFinding: null,
     findings: []
 };
 
@@ -50,7 +51,7 @@ function renderFindings() {
         row.className = "event-row";
         row.innerHTML = `
             <div class="event-title">${item.matchedKeyIdRedacted || "unknown key"} <span class="pill">${item.status}</span></div>
-            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.secretType || "unknown"} | ${item.iamUserName || "unresolved user"} | ${item.receivedAt}</div>
+            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.secretType || "unknown"} | ${item.severity || "UNKNOWN"} | alert ${item.alertStatus || "UNKNOWN"} | ${item.iamUserName || "unresolved user"} | ${item.receivedAt}</div>
             <button class="secondary" data-finding-id="${item.findingId}">Inspect</button>
         `;
         row.querySelector("button").addEventListener("click", () => loadFinding(item.findingId));
@@ -61,17 +62,25 @@ function renderFindings() {
 function renderDetail(payload) {
     const item = payload.finding;
     state.selectedFindingId = item.findingId;
+    state.selectedFinding = item;
 
     byId("detailStatus").textContent = item.status || "UNKNOWN";
     byId("detailFindingId").textContent = item.findingId || "-";
     byId("detailRepo").textContent = item.repoFullName || "-";
     byId("detailBranch").textContent = item.branch || "-";
     byId("detailSecretType").textContent = item.secretType || "-";
+    byId("detailSeverity").textContent = item.severity || "-";
+    byId("detailConfidence").textContent = item.confidence || "-";
     byId("detailKeyId").textContent = item.matchedKeyIdRedacted || "-";
     byId("detailUser").textContent = item.iamUserName || "not resolved";
     byId("detailCompareUrl").textContent = item.compareUrl || "-";
     byId("detailLastUsedService").textContent = item.lastUsedService || "unknown";
+    byId("detailDeliveryId").textContent = item.deliveryId || "-";
+    byId("detailDisableEligibility").textContent = item.disableEligible ? "ELIGIBLE" : "BLOCKED";
+    byId("detailAlertStatus").textContent = item.alertStatus || "-";
+    byId("detailAlertChannel").textContent = item.alertChannel || "-";
     byId("payloadView").textContent = JSON.stringify(payload.payload || {}, null, 2);
+    byId("historyView").textContent = JSON.stringify(item.actionHistory || [], null, 2);
 }
 
 async function apiFetch(path, options = {}) {
@@ -146,12 +155,17 @@ async function takeAction(action) {
         alert("Select a finding first.");
         return;
     }
+    if (action === "DISABLE_KEY" && state.selectedFinding && !state.selectedFinding.disableEligible) {
+        alert("This finding is currently blocked by the disable policy.");
+        return;
+    }
 
     try {
         const note = byId("actionNote").value.trim() || "Manual response action.";
+        const confirmed = byId("disableConfirm").value.trim() === "DISABLE_KEY";
         await apiFetch(`/findings/${state.selectedFindingId}/action`, {
             method: "POST",
-            body: JSON.stringify({ action, note })
+            body: JSON.stringify({ action, note, confirmed })
         });
         await loadFinding(state.selectedFindingId);
         await loadFindings();
