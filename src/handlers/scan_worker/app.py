@@ -2,12 +2,17 @@ import json
 from datetime import datetime, timezone
 
 from shared.alerts import publish_finding_alert
-from shared.config import disable_allowlist_users, evidence_bucket_name, findings_table_name
+from shared.config import (
+    auto_disable_mode,
+    disable_allowlist_users,
+    evidence_bucket_name,
+    findings_table_name,
+)
 from shared.deliveries import update_delivery_status
 from shared.dynamo import deserialize_item, table_resource
 from shared.detectors import extract_aws_access_key_findings
 from shared.github_diff import fetch_compare_diff, summarize_compare_window
-from shared.iam_keys import get_access_key_details
+from shared.iam_keys import disable_access_key, get_access_key_details
 from shared.storage import s3_client
 
 
@@ -63,6 +68,10 @@ def _store_finding(table, delivery_id, compare_summary, payload_key, finding, al
         "alertPublishedAt": "",
         "alertMessageId": "",
         "alertError": "",
+        "autoDisableMode": auto_disable_mode(),
+        "autoDisableStatus": "NOT_ENABLED",
+        "autoDisableAttemptedAt": "",
+        "autoDisableReason": "",
         "actionHistory": [
             {
                 "action": "DETECTED",
@@ -101,6 +110,91 @@ def _store_finding(table, delivery_id, compare_summary, payload_key, finding, al
         },
     )
     return deserialize_item(item)
+
+
+def _maybe_auto_disable(table, item):
+    mode = auto_disable_mode()
+    finding_id = item["findingId"]
+    attempted_at = datetime.now(timezone.utc).isoformat()
+    status = "NOT_ENABLED"
+    reason = "Auto-disable is disabled."
+    updated_status = item["status"]
+    disable_count = int(item.get("disableCount", 0))
+    action_history = list(item.get("actionHistory", []))
+
+    if mode == "ALLOWLIST_HIGH_CONFIDENCE":
+        if not item.get("keyExists"):
+            status = "SKIPPED"
+            reason = "Key could not be verified in IAM."
+        elif item.get("confidence") != "HIGH":
+            status = "SKIPPED"
+            reason = "Finding confidence was not HIGH."
+        elif not item.get("disableEligible", False):
+            status = "SKIPPED"
+            reason = "Finding is outside the current disable policy."
+        else:
+            try:
+                disable_access_key(item["iamUserName"], item["matchedKeyId"])
+                status = "DISABLED"
+                reason = "LeakGuard auto-disabled a verified AWS access key under the allowlist policy."
+                updated_status = "KEY_DISABLED"
+                disable_count += 1
+                action_history.append(
+                    {
+                        "action": "AUTO_DISABLED",
+                        "actedAt": attempted_at,
+                        "note": reason,
+                        "confirmed": True,
+                    }
+                )
+            except Exception as exc:
+                status = "FAILED"
+                reason = f"Auto-disable attempt failed: {str(exc)[:240]}"
+                action_history.append(
+                    {
+                        "action": "AUTO_DISABLE_FAILED",
+                        "actedAt": attempted_at,
+                        "note": reason,
+                        "confirmed": True,
+                    }
+                )
+    elif mode != "OFF":
+        status = "SKIPPED"
+        reason = f"Unknown auto-disable mode {mode}."
+
+    if status == "SKIPPED":
+        action_history.append(
+            {
+                "action": "AUTO_DISABLE_SKIPPED",
+                "actedAt": attempted_at,
+                "note": reason,
+                "confirmed": False,
+            }
+        )
+
+    table.update_item(
+        Key={"eventId": finding_id},
+        UpdateExpression=(
+            "SET #status = :status, lastUpdatedAt = :attempted_at, lastActionNote = :note, "
+            "disableCount = :disable_count, actionHistory = :action_history, "
+            "autoDisableMode = :auto_disable_mode, autoDisableStatus = :auto_disable_status, "
+            "autoDisableAttemptedAt = :auto_disable_attempted_at, autoDisableReason = :auto_disable_reason"
+        ),
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={
+            ":status": updated_status,
+            ":attempted_at": attempted_at,
+            ":note": reason,
+            ":disable_count": disable_count,
+            ":action_history": action_history,
+            ":auto_disable_mode": mode,
+            ":auto_disable_status": status,
+            ":auto_disable_attempted_at": attempted_at,
+            ":auto_disable_reason": reason,
+        },
+    )
+    updated = table.get_item(Key={"eventId": finding_id}).get("Item", {})
+    return deserialize_item(updated)
 
 
 def _process_delivery(message):
@@ -151,7 +245,7 @@ def _process_delivery(message):
             allowed_users,
         )
         if stored_finding:
-            stored.append(stored_finding)
+            stored.append(_maybe_auto_disable(table, stored_finding))
 
     update_delivery_status(
         delivery_id,

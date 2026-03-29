@@ -42,6 +42,7 @@ This project treats that as a very small response workflow:
 - assign a simple `severity` and `confidence`
 - enforce a disable allowlist if the team configures one
 - publish an optional SNS email alert for each new finding
+- optionally auto-disable verified leaked keys under an allowlist-based containment policy
 - expose:
   - `GET /findings`
   - `GET /findings/{findingId}`
@@ -71,6 +72,8 @@ sam deploy --guided
 If `sam deploy --guided` asks for `AlertEmailEndpoint`, enter an email address to receive one alert email per new finding. Leave it blank to keep alerting disabled. If you do enter an email, AWS SNS will send a subscription confirmation message that must be accepted before alerts are delivered.
 
 If `sam deploy --guided` asks for `GitHubWebhookSecret`, enter the webhook secret configured in your GitHub repository or organization. If it asks for `GitHubToken`, enter a GitHub token with permission to call the compare API for the target repository. With a token configured, LeakGuard treats the GitHub compare API as the primary diff source and only falls back to `inlineDiff` when the compare request fails.
+
+If `sam deploy --guided` asks for `AutoDisableMode`, leave it as `OFF` for a detect-only deployment. Set it to `ALLOWLIST_HIGH_CONFIDENCE` only when you want LeakGuard to auto-disable verified leaked keys for IAM users that also pass the configured disable allowlist.
 
 ### 3. Run locally
 
@@ -130,6 +133,9 @@ Each finding tracks:
 - `disableEligible`
 - `alertStatus`
 - `alertChannel`
+- `autoDisableMode`
+- `autoDisableStatus`
+- `autoDisableReason`
 
 ## Current implementation notes
 
@@ -138,6 +144,7 @@ Each finding tracks:
 - GitHub deliveries are deduplicated in a separate DynamoDB table with TTL
 - webhook ingress now only validates and enqueues; the SQS worker performs diff scanning and finding creation
 - findings record `diffSource` so operators can see whether a case came from a real compare API fetch or a demo fallback
+- containment is opt-in: `AutoDisableMode=ALLOWLIST_HIGH_CONFIDENCE` only auto-disables verified keys that also pass the current disable allowlist
 - disable is manual, opt-in, and requires explicit confirmation in the console
 - `DISABLE_ALLOWLIST_USERS` can restrict which IAM users are eligible for key disable
 - `AlertEmailEndpoint` creates an SNS email subscription and enables per-finding alert publishing

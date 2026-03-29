@@ -59,9 +59,10 @@ function renderFindings() {
         const row = document.createElement("article");
         row.className = "event-row";
         const diffSource = item.diffSource || "UNKNOWN";
+        const autoDisable = item.autoDisableStatus || "NOT_ENABLED";
         row.innerHTML = `
             <div class="event-title">${item.matchedKeyIdRedacted || "unknown key"} <span class="pill">${item.status}</span></div>
-            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.secretType || "unknown"} | ${item.severity || "UNKNOWN"} | ${diffSource} | alert ${item.alertStatus || "UNKNOWN"} | ${item.iamUserName || "unresolved user"} | ${item.receivedAt}</div>
+            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.secretType || "unknown"} | ${item.severity || "UNKNOWN"} | ${diffSource} | alert ${item.alertStatus || "UNKNOWN"} | auto ${autoDisable} | ${item.iamUserName || "unresolved user"} | ${item.receivedAt}</div>
             <button class="secondary" data-finding-id="${item.findingId}">Inspect</button>
         `;
         row.querySelector("button").addEventListener("click", () => loadFinding(item.findingId));
@@ -90,8 +91,11 @@ function renderDetail(payload) {
     byId("detailDisableEligibility").textContent = item.disableEligible ? "ELIGIBLE" : "BLOCKED";
     byId("detailAlertStatus").textContent = item.alertStatus || "-";
     byId("detailAlertChannel").textContent = item.alertChannel || "-";
+    byId("detailAutoDisableMode").textContent = item.autoDisableMode || "OFF";
+    byId("detailAutoDisableStatus").textContent = item.autoDisableStatus || "NOT_ENABLED";
     byId("payloadView").textContent = JSON.stringify(payload.payload || {}, null, 2);
     byId("historyView").textContent = JSON.stringify(item.actionHistory || [], null, 2);
+    byId("autoDisableReasonView").textContent = item.autoDisableReason || "No auto-disable decision recorded yet.";
 }
 
 async function apiFetch(path, options = {}) {

@@ -17,6 +17,13 @@ Parameters:
     Default: ""
     NoEcho: true
     Description: Optional GitHub token for Compare API calls. Leave blank to use demo inline diffs only.
+  AutoDisableMode:
+    Type: String
+    Default: "OFF"
+    AllowedValues:
+      - OFF
+      - ALLOWLIST_HIGH_CONFIDENCE
+    Description: Optional containment mode for automatically disabling verified leaked keys.
 
 Conditions:
   HasAlertEmailEndpoint: !Not [!Equals [!Ref AlertEmailEndpoint, ""]]
@@ -38,6 +45,7 @@ Globals:
         GITHUB_WEBHOOK_SECRET: !Ref GitHubWebhookSecret
         GITHUB_TOKEN: !Ref GitHubToken
         DISABLE_ALLOWLIST_USERS: ""
+        AUTO_DISABLE_MODE: !Ref AutoDisableMode
         ALERT_TOPIC_ARN: !If [HasAlertEmailEndpoint, !Ref LeakGuardAlertsTopic, ""]
 
 Resources:
@@ -157,6 +165,7 @@ Resources:
             - Effect: Allow
               Action:
                 - iam:GetAccessKeyLastUsed
+                - iam:UpdateAccessKey
               Resource: "*"
             - Effect: Allow
               Action:
