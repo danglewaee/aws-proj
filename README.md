@@ -22,6 +22,7 @@ This project treats that as a very small response workflow:
 - `API Gateway HTTP API` for webhook ingress and operator APIs
 - `AWS Lambda (Python)` for ingest, listing, detail lookup, and disable actions
 - `DynamoDB` for finding metadata and status tracking
+- `DynamoDB` delivery dedupe table with TTL for GitHub webhook replay protection
 - `S3` for raw webhook evidence and action artifacts
 - `SNS` for optional finding alerts
 - `CloudWatch Logs` for operational traceability
@@ -31,6 +32,7 @@ This project treats that as a very small response workflow:
 ## MVP scope
 
 - receive GitHub push webhooks at `POST /github/webhook`
+- require `X-GitHub-Delivery` so each GitHub delivery can be deduplicated
 - verify `X-Hub-Signature-256` if a webhook secret is configured
 - detect `AWS_ACCESS_KEY_ID` patterns in diff text
 - persist findings to `DynamoDB`
@@ -76,6 +78,8 @@ Then post a sample GitHub push payload:
 ```bash
 curl -X POST http://127.0.0.1:3000/github/webhook \
   -H "content-type: application/json" \
+  -H "x-github-event: push" \
+  -H "x-github-delivery: sample-delivery-001" \
   -d @events/sample-github-push.json
 ```
 
@@ -113,6 +117,7 @@ Each finding tracks:
 - `confidence`
 - `compareUrl`
 - `receivedAt`
+- `deliveryId`
 - `payloadS3Key`
 - `disableCount`
 - `lastActionNote`
@@ -125,6 +130,7 @@ Each finding tracks:
 
 - `inlineDiff` can be provided in the payload to demo the flow without calling GitHub
 - if `GITHUB_TOKEN` is configured, the ingest function can fetch compare diffs from GitHub
+- GitHub deliveries are deduplicated in a separate DynamoDB table with TTL
 - disable is manual, opt-in, and requires explicit confirmation in the console
 - `DISABLE_ALLOWLIST_USERS` can restrict which IAM users are eligible for key disable
 - `AlertEmailEndpoint` creates an SNS email subscription and enables per-finding alert publishing
@@ -132,7 +138,7 @@ Each finding tracks:
 
 ## Next high-value steps
 
-1. Add a stricter duplicate model for repeated pushes touching the same key across separate deliveries
+1. Move diff scanning out of the ingress Lambda and into a worker path so GitHub webhook acks stay fast
 2. Add delivery-level audit search so one operator can review what the same GitHub webhook triggered over time
 3. Add a second notification channel only after SNS email stays low-noise
 4. Add a second detector for short-lived cloud credentials only after the AWS key flow is rock solid
