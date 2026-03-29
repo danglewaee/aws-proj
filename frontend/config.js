@@ -1,3 +1,3 @@
-window.WEBHOOK_CONSOLE_CONFIG = {
+window.LEAK_GUARD_CONFIG = {
     apiBaseUrl: ""
 };

@@ -1,6 +1,15 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: AWS-first Webhook Replay Console
+Description: AWS-first LeakGuard prototype
+
+Parameters:
+  AlertEmailEndpoint:
+    Type: String
+    Default: ""
+    Description: Optional email address subscribed to LeakGuard SNS alerts.
+
+Conditions:
+  HasAlertEmailEndpoint: !Not [!Equals [!Ref AlertEmailEndpoint, ""]]
 
 Globals:
   Function:
@@ -10,12 +19,16 @@ Globals:
     Tracing: Active
     Environment:
       Variables:
-        WEBHOOK_EVENTS_TABLE: !Ref WebhookEventsTable
-        RAW_PAYLOAD_BUCKET: !Ref RawPayloadBucket
+        LEAK_FINDINGS_TABLE: !Ref LeakFindingsTable
+        EVIDENCE_BUCKET: !Ref EvidenceBucket
         STATUS_INDEX_NAME: status-receivedAt-index
+        GITHUB_WEBHOOK_SECRET: ""
+        GITHUB_TOKEN: ""
+        DISABLE_ALLOWLIST_USERS: ""
+        ALERT_TOPIC_ARN: !If [HasAlertEmailEndpoint, !Ref LeakGuardAlertsTopic, ""]
 
 Resources:
-  WebhookApi:
+  LeakGuardApi:
     Type: AWS::Serverless::HttpApi
     Properties:
       CorsConfiguration:
@@ -23,20 +36,34 @@ Resources:
           - "*"
         AllowHeaders:
           - content-type
-          - x-correlation-id
-          - x-source-token
+          - x-hub-signature-256
+          - x-github-delivery
+          - x-github-event
         AllowMethods:
           - GET
           - POST
           - OPTIONS
 
-  RawPayloadBucket:
+  EvidenceBucket:
     Type: AWS::S3::Bucket
     Properties:
       VersioningConfiguration:
         Status: Enabled
 
-  WebhookEventsTable:
+  LeakGuardAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-alerts"
+
+  LeakGuardAlertsEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmailEndpoint
+    Properties:
+      Protocol: email
+      Endpoint: !Ref AlertEmailEndpoint
+      TopicArn: !Ref LeakGuardAlertsTopic
+
+  LeakFindingsTable:
     Type: AWS::DynamoDB::Table
     Properties:
       BillingMode: PAY_PER_REQUEST
@@ -67,16 +94,25 @@ Resources:
       Handler: handlers.ingest.app.lambda_handler
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref WebhookEventsTable
+            TableName: !Ref LeakFindingsTable
         - S3CrudPolicy:
-            BucketName: !Ref RawPayloadBucket
+            BucketName: !Ref EvidenceBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - iam:GetAccessKeyLastUsed
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref LeakGuardAlertsTopic
       Events:
-        IngestWebhook:
+        GitHubWebhook:
           Type: HttpApi
           Properties:
-            ApiId: !Ref WebhookApi
+            ApiId: !Ref LeakGuardApi
             Method: POST
-            Path: /webhooks/{source}
+            Path: /github/webhook
 
   ListEventsFunction:
     Type: AWS::Serverless::Function
@@ -85,14 +121,14 @@ Resources:
       Handler: handlers.list_events.app.lambda_handler
       Policies:
         - DynamoDBReadPolicy:
-            TableName: !Ref WebhookEventsTable
+            TableName: !Ref LeakFindingsTable
       Events:
-        ListEvents:
+        ListFindings:
           Type: HttpApi
           Properties:
-            ApiId: !Ref WebhookApi
+            ApiId: !Ref LeakGuardApi
             Method: GET
-            Path: /events
+            Path: /findings
 
   GetEventFunction:
     Type: AWS::Serverless::Function
@@ -101,16 +137,16 @@ Resources:
       Handler: handlers.get_event.app.lambda_handler
       Policies:
         - DynamoDBReadPolicy:
-            TableName: !Ref WebhookEventsTable
+            TableName: !Ref LeakFindingsTable
         - S3ReadPolicy:
-            BucketName: !Ref RawPayloadBucket
+            BucketName: !Ref EvidenceBucket
       Events:
-        GetEvent:
+        GetFinding:
           Type: HttpApi
           Properties:
-            ApiId: !Ref WebhookApi
+            ApiId: !Ref LeakGuardApi
             Method: GET
-            Path: /events/{eventId}
+            Path: /findings/{findingId}
 
   ReplayFunction:
     Type: AWS::Serverless::Function
@@ -119,26 +155,35 @@ Resources:
       Handler: handlers.replay.app.lambda_handler
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref WebhookEventsTable
+            TableName: !Ref LeakFindingsTable
         - S3CrudPolicy:
-            BucketName: !Ref RawPayloadBucket
+            BucketName: !Ref EvidenceBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - iam:UpdateAccessKey
+              Resource: "*"
       Events:
-        ReplayEvent:
+        ActionFinding:
           Type: HttpApi
           Properties:
-            ApiId: !Ref WebhookApi
+            ApiId: !Ref LeakGuardApi
             Method: POST
-            Path: /events/{eventId}/replay
+            Path: /findings/{findingId}/action
 
 Outputs:
   ApiBaseUrl:
     Description: Public URL for the HTTP API.
-    Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Value: !Sub "https://${LeakGuardApi}.execute-api.${AWS::Region}.amazonaws.com"
 
-  RawPayloadBucketName:
-    Description: Bucket storing archived webhook payloads and replay artifacts.
-    Value: !Ref RawPayloadBucket
+  EvidenceBucketName:
+    Description: Bucket storing webhook payloads and action artifacts.
+    Value: !Ref EvidenceBucket
 
-  WebhookEventsTableName:
-    Description: DynamoDB table storing event summaries and replay state.
-    Value: !Ref WebhookEventsTable
+  LeakFindingsTableName:
+    Description: DynamoDB table storing leak findings and status changes.
+    Value: !Ref LeakFindingsTable
+
+  AlertTopicArn:
+    Description: SNS topic used for finding alerts.
+    Value: !Ref LeakGuardAlertsTopic

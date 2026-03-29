@@ -1,64 +1,98 @@
 import json
 from datetime import datetime, timezone
 
-from shared.config import raw_payload_bucket_name, webhook_events_table_name
+from shared.config import disable_allowlist_users, evidence_bucket_name, findings_table_name
 from shared.dynamo import deserialize_item, table_resource
-from shared.http import not_found, json_response
+from shared.http import bad_request, not_found, json_response
+from shared.iam_keys import disable_access_key
 from shared.storage import s3_client
 
 
 def lambda_handler(event, context):
-    event_id = (event.get("pathParameters") or {}).get("eventId")
-    if not event_id:
-        return not_found("Event id was not provided.")
+    finding_id = (event.get("pathParameters") or {}).get("findingId")
+    if not finding_id:
+        return not_found("Finding id was not provided.")
 
     body = json.loads(event.get("body") or "{}")
-    replay_reason = body.get("reason", "manual replay requested")
-    replayed_at = datetime.now(timezone.utc).isoformat()
+    action = (body.get("action") or "").upper()
+    note = body.get("note", "Manual response action.")
+    confirmed = bool(body.get("confirmed"))
+    acted_at = datetime.now(timezone.utc).isoformat()
 
-    table = table_resource(webhook_events_table_name())
-    response = table.get_item(Key={"eventId": event_id})
+    if action not in {"DISABLE_KEY", "DISMISS"}:
+        return bad_request("Action must be DISABLE_KEY or DISMISS.")
+
+    table = table_resource(findings_table_name())
+    response = table.get_item(Key={"eventId": finding_id})
     item = response.get("Item")
     if not item:
-        return not_found(f"Event {event_id} was not found.")
+        return not_found(f"Finding {finding_id} was not found.")
 
-    payload_key = item.get("payloadS3Key")
-    if payload_key:
-        payload_response = s3_client.get_object(
-            Bucket=raw_payload_bucket_name(),
-            Key=payload_key,
-        )
-        original_payload = payload_response["Body"].read()
-        replay_key = f"replays/{item['source']}/{replayed_at}/{event_id}.json"
-        s3_client.put_object(
-            Bucket=raw_payload_bucket_name(),
-            Key=replay_key,
-            Body=original_payload,
-            ContentType="application/json",
-            Metadata={"replay-reason": replay_reason},
-        )
+    new_status = "DISMISSED"
+    disable_count = int(item.get("disableCount", 0))
+    action_history = list(item.get("actionHistory", []))
+    if action == "DISABLE_KEY":
+        if not confirmed:
+            return bad_request("Disable key action requires explicit confirmation.")
+        user_name = item.get("iamUserName")
+        access_key_id = item.get("matchedKeyId")
+        if not user_name or not access_key_id:
+            return bad_request("Finding does not have enough IAM data to disable a key.")
+        allowed_users = disable_allowlist_users()
+        if allowed_users and user_name not in allowed_users:
+            return bad_request("IAM user is outside the configured disable allowlist.")
+        if not item.get("disableEligible", False):
+            return bad_request("Finding is not currently eligible for key disable.")
+        disable_access_key(user_name, access_key_id)
+        disable_count += 1
+        new_status = "KEY_DISABLED"
 
-    replay_count = int(item.get("replayCount", 0)) + 1
+    action_history.append(
+        {
+            "action": action,
+            "actedAt": acted_at,
+            "note": note,
+            "confirmed": confirmed,
+        }
+    )
+
+    audit_key = f"actions/{item.get('repoFullName', 'unknown').replace('/', '__')}/{acted_at}/{finding_id}.json"
+    s3_client.put_object(
+        Bucket=evidence_bucket_name(),
+        Key=audit_key,
+        Body=json.dumps(
+            {
+                "findingId": finding_id,
+                "action": action,
+                "note": note,
+                "confirmed": confirmed,
+                "actedAt": acted_at,
+            }
+        ).encode("utf-8"),
+        ContentType="application/json",
+    )
+
     table.update_item(
-        Key={"eventId": event_id},
+        Key={"eventId": finding_id},
         UpdateExpression=(
-            "SET #status = :status, replayCount = :replay_count, replayedAt = :replayed_at, "
-            "lastProcessedAt = :replayed_at, lastReplayReason = :reason"
+            "SET #status = :status, lastUpdatedAt = :acted_at, lastActionNote = :note, "
+            "disableCount = :disable_count, actionHistory = :action_history"
         ),
         ExpressionAttributeNames={"#status": "status"},
         ExpressionAttributeValues={
-            ":status": "REPLAYED",
-            ":replay_count": replay_count,
-            ":replayed_at": replayed_at,
-            ":reason": replay_reason,
+            ":status": new_status,
+            ":acted_at": acted_at,
+            ":note": note,
+            ":disable_count": disable_count,
+            ":action_history": action_history,
         },
     )
 
-    updated = table.get_item(Key={"eventId": event_id}).get("Item", {})
+    updated = table.get_item(Key={"eventId": finding_id}).get("Item", {})
     return json_response(
         200,
         {
-            "message": "Replay recorded.",
-            "event": deserialize_item(updated),
+            "message": "Action recorded.",
+            "finding": deserialize_item(updated),
         },
     )

@@ -3,20 +3,20 @@
 ## Week 1
 
 - deploy `API Gateway`, `Lambda`, `DynamoDB`, and `S3`
-- accept webhook payloads through `POST /webhooks/{source}`
-- persist raw payload and summary metadata
+- accept GitHub push webhooks through `POST /github/webhook`
+- persist findings and archived evidence
 
 ## Week 2
 
-- finish operator console event list
-- add event detail page behavior
-- filter by `status`, `source`, and `eventType`
+- finish operator console list and detail flow
+- add diff-based AWS access key detection
+- display IAM username enrichment when the key exists
 
 ## Week 3
 
-- implement replay state changes
-- store replay artifacts in `S3`
-- improve logs and correlation tracing
+- implement manual disable action
+- write audit artifacts to `S3`
+- improve finding states and notes
 
 ## Week 4
 
@@ -26,8 +26,8 @@
 
 ## Explicit non-goals for V1
 
-- multi-tenant support
-- provider-specific cryptographic signature verification
-- Slack or email alerting
-- dead-letter queue orchestration
-- long-running workflow engines
+- multi-provider secret scanning
+- entropy-heavy generic secret detection
+- automatic disable by default
+- long-running workflow orchestration
+- ticketing and enterprise notification workflows

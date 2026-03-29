@@ -65,7 +65,7 @@ $configPath = Join-Path $frontendPath "config.js"
 $policyPath = Join-Path $projectRoot "bucket-policy.json"
 
 $configContent = @"
-window.WEBHOOK_CONSOLE_CONFIG = {
+window.LEAK_GUARD_CONFIG = {
     apiBaseUrl: "$ApiBaseUrl"
 };
 "@

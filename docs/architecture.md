@@ -2,109 +2,85 @@
 
 ## One-line thesis
 
-`Webhook Replay Console` is an AWS-native operator surface for webhook ingestion, inspection, and replay.
+`LeakGuard` is an AWS-native response bot for leaked AWS access keys found in GitHub push events.
 
 ## Core user
 
-- integration engineers
-- backend teams maintaining webhook handlers
-- operations teams debugging delivery failures
+- platform and security-minded backend engineers
+- small dev teams without a full secret scanning workflow
+- anyone who needs to answer "did we just leak a live AWS key?"
 
 ## Main pain
 
-- failed webhooks are hard to inspect
-- raw payloads are not easy to recover
-- retries happen through ad-hoc scripts
-- there is no clean audit trail for manual replay
+- a leaked key can stay active until someone notices it
+- teams lose time searching diffs, logs, and IAM consoles separately
+- many tools stop at detection and do not close the loop on AWS credentials
 
 ## AWS architecture
 
 ```mermaid
 flowchart LR
-    A["External webhook source"] --> B["API Gateway HTTP API"]
-    B --> C["Lambda: ingest"]
-    C --> D["DynamoDB: webhook-events"]
-    C --> E["S3: raw-payload-bucket"]
-    F["Operator console"] --> B
-    B --> G["Lambda: list-events"]
-    B --> H["Lambda: get-event"]
-    B --> I["Lambda: replay"]
-    I --> D
-    I --> E
-    C --> J["CloudWatch Logs"]
-    G --> J
-    H --> J
-    I --> J
+    A["GitHub push webhook"] --> B["API Gateway HTTP API"]
+    B --> C["Lambda: ingest webhook"]
+    C --> D["DynamoDB: leak findings"]
+    C --> E["S3: evidence archive"]
+    C --> F["IAM: GetAccessKeyLastUsed"]
+    G["Operator console"] --> B
+    B --> H["Lambda: list findings"]
+    B --> I["Lambda: get finding"]
+    B --> J["Lambda: action finding"]
+    J --> D
+    J --> E
+    J --> K["IAM: UpdateAccessKey"]
 ```
 
 ## Resource responsibilities
 
 ### API Gateway
 
-- public ingress for webhook sources
-- operator-facing endpoints for list, detail, and replay
+- receives GitHub webhook calls
+- exposes operator-facing endpoints for list, detail, and manual actions
 
 ### Lambda ingest
 
-- accepts webhook payload
-- derives metadata such as `source`, `eventType`, and `correlationId`
-- stores raw payload in `S3`
-- stores event summary in `DynamoDB`
+- verifies webhook signature when a shared secret is configured
+- fetches or reads diff text
+- runs a high-confidence detector for AWS access key IDs
+- stores findings in `DynamoDB`
+- archives evidence in `S3`
+- enriches findings with IAM key metadata when possible
 
 ### DynamoDB
 
-Stores event summary and replay state:
+Stores:
 
-- event identifier
+- finding id
 - status
-- source
+- repository and branch
+- redacted key id
+- IAM user name
 - timestamps
-- replay count
-- error fields
-- payload archive key
+- action counts
 
 ### S3
 
 Stores:
 
 - raw webhook payloads
-- replay artifacts
+- action audit artifacts
 
-### Operator console
+### Action function
 
-Provides:
-
-- event list
-- event detail
-- replay trigger
-- quick API base configuration
-
-## Data model
-
-### Table: `webhook-events`
-
-- primary key: `eventId`
-- global secondary index:
-  - partition key: `status`
-  - sort key: `receivedAt`
-
-### Typical state transitions
-
-```text
-RECEIVED -> PROCESSED
-RECEIVED -> FAILED
-FAILED -> REPLAYED
-PROCESSED -> REPLAYED
-```
+- disables an exposed IAM access key on operator request
+- records audit state back into `DynamoDB`
 
 ## Honest scope boundary
 
-This scaffold intentionally stops short of:
+This prototype intentionally does not try to be:
 
-- provider-specific webhook signature verification
-- dead-letter queues
-- automatic retry policies
-- production-grade downstream delivery fan-out
-- full auth and RBAC
+- a full secret scanning platform
+- a GitHub Advanced Security replacement
+- a multi-provider secret detector
+- an automatic remediation engine by default
 
-Those belong in the next iteration, after the operator workflow is stable.
+It focuses on one painful workflow: detect a leaked AWS key and respond fast.

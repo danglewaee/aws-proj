@@ -1,24 +1,30 @@
 const configuredBaseUrl =
-    (window.WEBHOOK_CONSOLE_CONFIG && window.WEBHOOK_CONSOLE_CONFIG.apiBaseUrl) || "";
-const savedBaseUrl = localStorage.getItem("webhook-console-api-base-url") || configuredBaseUrl;
+    (window.LEAK_GUARD_CONFIG && window.LEAK_GUARD_CONFIG.apiBaseUrl) || "";
+const savedBaseUrl = localStorage.getItem("leak-guard-api-base-url") || configuredBaseUrl;
 
 const state = {
     apiBaseUrl: savedBaseUrl,
-    selectedEventId: null,
-    events: []
+    selectedFindingId: null,
+    selectedFinding: null,
+    findings: []
 };
 
-const sampleWebhook = {
-    type: "order.paid",
-    providerEventId: "evt_shopify_120045",
-    correlationId: "corr-demo-001",
-    simulateFailure: true,
-    order: {
-        orderId: "SO-240501",
-        currency: "USD",
-        amount: 245.5,
-        customerEmail: "ops-demo@example.com"
-    }
+const samplePush = {
+    ref: "refs/heads/main",
+    before: "1111111111111111111111111111111111111111",
+    after: "2222222222222222222222222222222222222222",
+    compare: "https://github.com/acme/demo-repo/compare/1111111...2222222",
+    repository: {
+        full_name: "acme/demo-repo"
+    },
+    inlineDiff: [
+        "diff --git a/app.py b/app.py",
+        "index 123..456 100644",
+        "--- a/app.py",
+        "+++ b/app.py",
+        "@@ -1,3 +1,5 @@",
+        "+AWS_ACCESS_KEY_ID = \"AKIAIOSFODNN7EXAMPLE\""
+    ].join("\n")
 };
 
 function byId(id) {
@@ -29,40 +35,52 @@ function normalizedBaseUrl() {
     return (state.apiBaseUrl || "").replace(/\/$/, "");
 }
 
-function renderEvents() {
-    const list = byId("eventList");
-    const count = byId("eventCount");
+function renderFindings() {
+    const list = byId("findingList");
+    const count = byId("findingCount");
     list.innerHTML = "";
-    count.textContent = `${state.events.length} loaded`;
+    count.textContent = `${state.findings.length} loaded`;
 
-    if (state.events.length === 0) {
-        list.innerHTML = '<p class="empty">No events loaded yet.</p>';
+    if (state.findings.length === 0) {
+        list.innerHTML = '<p class="empty">No leaked key findings loaded yet.</p>';
         return;
     }
 
-    state.events.forEach((event) => {
+    state.findings.forEach((item) => {
         const row = document.createElement("article");
         row.className = "event-row";
         row.innerHTML = `
-            <div class="event-title">${event.eventType || "unknown"} <span class="pill">${event.status}</span></div>
-            <div class="event-meta">${event.source} | ${event.receivedAt} | replayed ${event.replayCount || 0} times</div>
-            <button class="secondary" data-event-id="${event.eventId}">Inspect</button>
+            <div class="event-title">${item.matchedKeyIdRedacted || "unknown key"} <span class="pill">${item.status}</span></div>
+            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.secretType || "unknown"} | ${item.severity || "UNKNOWN"} | alert ${item.alertStatus || "UNKNOWN"} | ${item.iamUserName || "unresolved user"} | ${item.receivedAt}</div>
+            <button class="secondary" data-finding-id="${item.findingId}">Inspect</button>
         `;
-        row.querySelector("button").addEventListener("click", () => loadEvent(event.eventId));
+        row.querySelector("button").addEventListener("click", () => loadFinding(item.findingId));
         list.appendChild(row);
     });
 }
 
 function renderDetail(payload) {
-    const event = payload.event;
-    state.selectedEventId = event.eventId;
+    const item = payload.finding;
+    state.selectedFindingId = item.findingId;
+    state.selectedFinding = item;
 
-    byId("detailStatus").textContent = event.status || "UNKNOWN";
-    byId("detailEventId").textContent = event.eventId || "-";
-    byId("detailSource").textContent = event.source || "-";
-    byId("detailType").textContent = event.eventType || "-";
-    byId("detailReplayCount").textContent = String(event.replayCount || 0);
+    byId("detailStatus").textContent = item.status || "UNKNOWN";
+    byId("detailFindingId").textContent = item.findingId || "-";
+    byId("detailRepo").textContent = item.repoFullName || "-";
+    byId("detailBranch").textContent = item.branch || "-";
+    byId("detailSecretType").textContent = item.secretType || "-";
+    byId("detailSeverity").textContent = item.severity || "-";
+    byId("detailConfidence").textContent = item.confidence || "-";
+    byId("detailKeyId").textContent = item.matchedKeyIdRedacted || "-";
+    byId("detailUser").textContent = item.iamUserName || "not resolved";
+    byId("detailCompareUrl").textContent = item.compareUrl || "-";
+    byId("detailLastUsedService").textContent = item.lastUsedService || "unknown";
+    byId("detailDeliveryId").textContent = item.deliveryId || "-";
+    byId("detailDisableEligibility").textContent = item.disableEligible ? "ELIGIBLE" : "BLOCKED";
+    byId("detailAlertStatus").textContent = item.alertStatus || "-";
+    byId("detailAlertChannel").textContent = item.alertChannel || "-";
     byId("payloadView").textContent = JSON.stringify(payload.payload || {}, null, 2);
+    byId("historyView").textContent = JSON.stringify(item.actionHistory || [], null, 2);
 }
 
 async function apiFetch(path, options = {}) {
@@ -86,62 +104,71 @@ async function apiFetch(path, options = {}) {
     return data;
 }
 
-async function loadEvents() {
+async function loadFindings() {
     try {
         const status = byId("statusFilter").value.trim();
-        const source = byId("sourceFilter").value.trim();
+        const repo = byId("repoFilter").value.trim();
+        const secretType = byId("secretTypeFilter").value.trim();
         const params = new URLSearchParams();
         if (status) {
             params.set("status", status);
         }
-        if (source) {
-            params.set("source", source);
+        if (repo) {
+            params.set("repo", repo);
+        }
+        if (secretType) {
+            params.set("secretType", secretType);
         }
 
         const suffix = params.toString() ? `?${params.toString()}` : "";
-        const data = await apiFetch(`/events${suffix}`);
-        state.events = data.items || [];
-        renderEvents();
+        const data = await apiFetch(`/findings${suffix}`);
+        state.findings = data.items || [];
+        renderFindings();
     } catch (error) {
         alert(error.message);
     }
 }
 
-async function loadEvent(eventId) {
+async function loadFinding(findingId) {
     try {
-        const data = await apiFetch(`/events/${eventId}`);
+        const data = await apiFetch(`/findings/${findingId}`);
         renderDetail(data);
     } catch (error) {
         alert(error.message);
     }
 }
 
-async function ingestSampleEvent() {
+async function ingestSamplePush() {
     try {
-        await apiFetch("/webhooks/shopify", {
+        await apiFetch("/github/webhook", {
             method: "POST",
-            body: JSON.stringify(sampleWebhook)
+            body: JSON.stringify(samplePush)
         });
-        await loadEvents();
+        await loadFindings();
     } catch (error) {
         alert(error.message);
     }
 }
 
-async function replaySelectedEvent() {
-    if (!state.selectedEventId) {
-        alert("Select an event first.");
+async function takeAction(action) {
+    if (!state.selectedFindingId) {
+        alert("Select a finding first.");
+        return;
+    }
+    if (action === "DISABLE_KEY" && state.selectedFinding && !state.selectedFinding.disableEligible) {
+        alert("This finding is currently blocked by the disable policy.");
         return;
     }
 
     try {
-        const reason = byId("replayReason").value.trim() || "manual replay requested";
-        await apiFetch(`/events/${state.selectedEventId}/replay`, {
+        const note = byId("actionNote").value.trim() || "Manual response action.";
+        const confirmed = byId("disableConfirm").value.trim() === "DISABLE_KEY";
+        await apiFetch(`/findings/${state.selectedFindingId}/action`, {
             method: "POST",
-            body: JSON.stringify({ reason })
+            body: JSON.stringify({ action, note, confirmed })
         });
-        await loadEvent(state.selectedEventId);
-        await loadEvents();
+        await loadFinding(state.selectedFindingId);
+        await loadFindings();
     } catch (error) {
         alert(error.message);
     }
@@ -149,16 +176,17 @@ async function replaySelectedEvent() {
 
 function saveBaseUrl() {
     state.apiBaseUrl = byId("apiBaseUrl").value.trim();
-    localStorage.setItem("webhook-console-api-base-url", state.apiBaseUrl);
+    localStorage.setItem("leak-guard-api-base-url", state.apiBaseUrl);
 }
 
 function boot() {
     byId("apiBaseUrl").value = state.apiBaseUrl;
     byId("saveBaseUrl").addEventListener("click", saveBaseUrl);
-    byId("refreshEvents").addEventListener("click", loadEvents);
-    byId("ingestSample").addEventListener("click", ingestSampleEvent);
-    byId("applyFilters").addEventListener("click", loadEvents);
-    byId("replayEvent").addEventListener("click", replaySelectedEvent);
+    byId("refreshFindings").addEventListener("click", loadFindings);
+    byId("ingestSample").addEventListener("click", ingestSamplePush);
+    byId("applyFilters").addEventListener("click", loadFindings);
+    byId("disableKey").addEventListener("click", () => takeAction("DISABLE_KEY"));
+    byId("dismissFinding").addEventListener("click", () => takeAction("DISMISS"));
 }
 
 boot();
