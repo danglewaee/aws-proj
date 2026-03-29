@@ -13,6 +13,10 @@ def evidence_bucket_name():
     return os.environ["EVIDENCE_BUCKET"]
 
 
+def scan_queue_url():
+    return os.environ["SCAN_QUEUE_URL"]
+
+
 def status_index_name():
     return os.environ.get("STATUS_INDEX_NAME", "status-receivedAt-index")
 

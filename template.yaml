@@ -7,6 +7,16 @@ Parameters:
     Type: String
     Default: ""
     Description: Optional email address subscribed to LeakGuard SNS alerts.
+  GitHubWebhookSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional GitHub webhook secret used to verify X-Hub-Signature-256.
+  GitHubToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional GitHub token for Compare API calls. Leave blank to use demo inline diffs only.
 
 Conditions:
   HasAlertEmailEndpoint: !Not [!Equals [!Ref AlertEmailEndpoint, ""]]
@@ -22,10 +32,11 @@ Globals:
         LEAK_FINDINGS_TABLE: !Ref LeakFindingsTable
         DELIVERIES_TABLE: !Ref WebhookDeliveriesTable
         EVIDENCE_BUCKET: !Ref EvidenceBucket
+        SCAN_QUEUE_URL: !Ref LeakGuardScanQueue
         STATUS_INDEX_NAME: status-receivedAt-index
         DELIVERY_TTL_DAYS: "14"
-        GITHUB_WEBHOOK_SECRET: ""
-        GITHUB_TOKEN: ""
+        GITHUB_WEBHOOK_SECRET: !Ref GitHubWebhookSecret
+        GITHUB_TOKEN: !Ref GitHubToken
         DISABLE_ALLOWLIST_USERS: ""
         ALERT_TOPIC_ARN: !If [HasAlertEmailEndpoint, !Ref LeakGuardAlertsTopic, ""]
 
@@ -51,6 +62,11 @@ Resources:
     Properties:
       VersioningConfiguration:
         Status: Enabled
+
+  LeakGuardScanQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 60
 
   LeakGuardAlertsTopic:
     Type: AWS::SNS::Topic
@@ -110,6 +126,28 @@ Resources:
       Handler: handlers.ingest.app.lambda_handler
       Policies:
         - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookDeliveriesTable
+        - S3CrudPolicy:
+            BucketName: !Ref EvidenceBucket
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt LeakGuardScanQueue.QueueName
+      Events:
+        GitHubWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LeakGuardApi
+            Method: POST
+            Path: /github/webhook
+
+  ScanWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.scan_worker.app.lambda_handler
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !GetAtt LeakGuardScanQueue.QueueName
+        - DynamoDBCrudPolicy:
             TableName: !Ref LeakFindingsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref WebhookDeliveriesTable
@@ -125,12 +163,13 @@ Resources:
                 - sns:Publish
               Resource: !Ref LeakGuardAlertsTopic
       Events:
-        GitHubWebhook:
-          Type: HttpApi
+        ScanQueueEvent:
+          Type: SQS
           Properties:
-            ApiId: !Ref LeakGuardApi
-            Method: POST
-            Path: /github/webhook
+            Queue: !GetAtt LeakGuardScanQueue.Arn
+            BatchSize: 5
+            ScalingConfig:
+              MaximumConcurrency: 2
 
   ListEventsFunction:
     Type: AWS::Serverless::Function
@@ -205,6 +244,10 @@ Outputs:
   WebhookDeliveriesTableName:
     Description: DynamoDB table storing GitHub delivery dedupe state with TTL.
     Value: !Ref WebhookDeliveriesTable
+
+  ScanQueueUrl:
+    Description: SQS queue used to decouple webhook ingress from diff scanning.
+    Value: !Ref LeakGuardScanQueue
 
   AlertTopicArn:
     Description: SNS topic used for finding alerts.

@@ -4,19 +4,14 @@ import hmac
 import json
 from datetime import datetime, timezone
 
-from shared.alerts import publish_finding_alert
 from shared.config import (
-    disable_allowlist_users,
     evidence_bucket_name,
-    findings_table_name,
     github_webhook_secret,
 )
-from shared.detectors import extract_aws_access_key_findings
 from shared.deliveries import delete_delivery, register_delivery, update_delivery_status
-from shared.dynamo import deserialize_item, table_resource
-from shared.github_diff import fetch_compare_diff, raw_payload_bytes, summarize_compare_window
+from shared.github_diff import raw_payload_bytes, summarize_compare_window
 from shared.http import bad_request, json_response, unauthorized
-from shared.iam_keys import get_access_key_details
+from shared.queue import enqueue_scan_job
 from shared.storage import s3_client
 
 
@@ -44,9 +39,9 @@ def _verify_signature(raw_body, headers):
     return hmac.compare_digest(signature, expected)
 
 
-def _archive_payload(repo_name, finding_id, payload):
+def _archive_delivery_payload(repo_name, delivery_id, payload):
     received_at = datetime.now(timezone.utc).isoformat()
-    payload_key = f"findings/{repo_name}/{received_at}/{finding_id}.json".replace("//", "/")
+    payload_key = f"deliveries/{repo_name}/{received_at}/{delivery_id}.json".replace("//", "/")
     s3_client.put_object(
         Bucket=evidence_bucket_name(),
         Key=payload_key,
@@ -107,115 +102,28 @@ def lambda_handler(event, context):
         )
 
     try:
-        diff_text = fetch_compare_diff(payload)
-        findings = extract_aws_access_key_findings(diff_text)
-        if not findings:
-            update_delivery_status(
-                delivery_id,
-                "PROCESSED_NO_FINDINGS",
-                0,
-                "No leaked AWS access key IDs detected in this delivery.",
-            )
-            return json_response(202, {"message": "No leaked AWS access keys detected.", "findings": []})
-
         repo_name = compare_summary["repoFullName"].replace("/", "__")
-        table = table_resource(findings_table_name())
-        allowed_users = disable_allowlist_users()
-        stored = []
-
-        for finding in findings:
-            finding_id = f"{delivery_id}#{finding['matchedKeyId']}"
-            received_at = datetime.now(timezone.utc).isoformat()
-            key_details = get_access_key_details(finding["matchedKeyId"])
-            payload_key = _archive_payload(repo_name, finding_id, payload)
-            iam_user_name = key_details["userName"]
-            disable_eligible = bool(iam_user_name and key_details["exists"])
-            if allowed_users:
-                disable_eligible = disable_eligible and iam_user_name in allowed_users
-
-            item = {
-                "eventId": finding_id,
-                "findingId": finding_id,
-                "status": "OPEN",
-                "receivedAt": received_at,
-                "lastUpdatedAt": received_at,
-                "deliveryId": delivery_id or finding_id,
-                "secretType": finding["secretType"],
-                "severity": finding["severity"],
-                "confidence": finding["confidence"],
+        payload_key = _archive_delivery_payload(repo_name, delivery_id, payload)
+        enqueue_scan_job(
+            {
+                "deliveryId": delivery_id,
+                "eventName": github_event or "push",
                 "repoFullName": compare_summary["repoFullName"],
-                "branch": compare_summary["branch"] or "unknown",
-                "compareUrl": compare_summary["compareUrl"],
-                "beforeSha": compare_summary["before"] or "unknown",
-                "afterSha": compare_summary["after"] or "unknown",
-                "matchedKeyIdRedacted": finding["matchedKeyIdRedacted"],
-                "matchedKeyId": finding["matchedKeyId"],
-                "iamUserName": iam_user_name,
-                "keyExists": key_details["exists"],
-                "lastUsedService": str(key_details["serviceName"] or ""),
-                "lastUsedRegion": str(key_details["region"] or ""),
-                "evidenceSnippet": finding["evidenceSnippet"],
                 "payloadS3Key": payload_key,
-                "disableCount": 0,
-                "disableEligible": disable_eligible,
-                "disableAllowlistApplied": bool(allowed_users),
-                "lastActionNote": None,
-                "confirmationRequired": True,
-                "alertStatus": "PENDING",
-                "alertChannel": "SNS",
-                "alertPublishedAt": "",
-                "alertMessageId": "",
-                "alertError": "",
-                "actionHistory": [
-                    {
-                        "action": "DETECTED",
-                        "actedAt": received_at,
-                        "note": "LeakGuard detected a high-confidence AWS access key pattern in this push.",
-                    }
-                ],
             }
-            try:
-                table.put_item(
-                    Item=item,
-                    ConditionExpression="attribute_not_exists(eventId)",
-                )
-            except Exception:
-                continue
-            alert_result = publish_finding_alert(item)
-            item["alertStatus"] = alert_result["status"]
-            item["alertChannel"] = alert_result["channel"]
-            item["alertPublishedAt"] = alert_result["publishedAt"]
-            item["alertMessageId"] = alert_result["messageId"]
-            item["alertError"] = alert_result["error"]
-            table.update_item(
-                Key={"eventId": finding_id},
-                UpdateExpression=(
-                    "SET alertStatus = :alert_status, alertChannel = :alert_channel, "
-                    "alertPublishedAt = :alert_published_at, alertMessageId = :alert_message_id, "
-                    "alertError = :alert_error"
-                ),
-                ExpressionAttributeValues={
-                    ":alert_status": item["alertStatus"],
-                    ":alert_channel": item["alertChannel"],
-                    ":alert_published_at": item["alertPublishedAt"],
-                    ":alert_message_id": item["alertMessageId"],
-                    ":alert_error": item["alertError"],
-                },
-            )
-            stored.append(deserialize_item(item))
-
+        )
         update_delivery_status(
             delivery_id,
-            "FINDINGS_CREATED",
-            len(stored),
-            "LeakGuard stored findings for this GitHub push delivery.",
+            "QUEUED_FOR_SCAN",
+            0,
+            "LeakGuard accepted the GitHub delivery and queued it for scanning.",
         )
 
         return json_response(
             202,
             {
-                "message": "LeakGuard captured leaked key findings.",
-                "findings": stored,
+                "message": "GitHub delivery accepted and queued for scanning.",
+                "deliveryId": delivery_id,
             },
         )
     except Exception:

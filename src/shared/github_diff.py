@@ -15,26 +15,60 @@ def build_compare_api_url(payload):
     return f"https://api.github.com/repos/{full_name}/compare/{before}...{after}"
 
 
-def fetch_compare_diff(payload):
-    inline_diff = payload.get("inlineDiff")
-    if inline_diff:
-        return inline_diff
-
-    compare_api_url = build_compare_api_url(payload)
-    token = github_token()
-    if not compare_api_url or not token:
-        return ""
-
+def _compare_api_request(compare_api_url, token):
     request = Request(compare_api_url)
     request.add_header("Accept", "application/vnd.github.v3.diff")
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("User-Agent", "LeakGuardPrototype")
+    with urlopen(request, timeout=10) as response:
+        return response.read().decode("utf-8")
 
-    try:
-        with urlopen(request, timeout=10) as response:
-            return response.read().decode("utf-8")
-    except (HTTPError, URLError):
-        return ""
+
+def fetch_compare_diff(payload):
+    inline_diff = payload.get("inlineDiff")
+
+    compare_api_url = build_compare_api_url(payload)
+    token = github_token()
+
+    if compare_api_url and token:
+        try:
+            return {
+                "diffText": _compare_api_request(compare_api_url, token),
+                "source": "GITHUB_COMPARE_API",
+                "error": "",
+            }
+        except (HTTPError, URLError) as exc:
+            if inline_diff:
+                return {
+                    "diffText": inline_diff,
+                    "source": "INLINE_DIFF_FALLBACK",
+                    "error": str(exc)[:240],
+                }
+            return {
+                "diffText": "",
+                "source": "GITHUB_COMPARE_API_ERROR",
+                "error": str(exc)[:240],
+            }
+
+    if inline_diff:
+        return {
+            "diffText": inline_diff,
+            "source": "INLINE_DIFF",
+            "error": "" if not compare_api_url else "GitHub token not configured. Used inline diff fallback.",
+        }
+
+    if compare_api_url and not token:
+        return {
+            "diffText": "",
+            "source": "COMPARE_API_UNCONFIGURED",
+            "error": "GitHub compare URL exists but GITHUB_TOKEN is not configured.",
+        }
+
+    return {
+        "diffText": "",
+        "source": "NO_DIFF_SOURCE",
+        "error": "No compare URL or inline diff available in payload.",
+    }
 
 
 def summarize_compare_window(payload):
