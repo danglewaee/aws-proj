@@ -144,7 +144,6 @@ Resources:
     Properties:
       CodeUri: src/
       Handler: handlers.scan_worker.app.lambda_handler
-      ReservedConcurrentExecutions: 2
       Policies:
         - SQSPollerPolicy:
             QueueName: !GetAtt LeakGuardScanQueue.QueueName
@@ -169,6 +168,8 @@ Resources:
           Properties:
             Queue: !GetAtt LeakGuardScanQueue.Arn
             BatchSize: 5
+            ScalingConfig:
+              MaximumConcurrency: 2
 
   ListEventsFunction:
     Type: AWS::Serverless::Function
