@@ -23,6 +23,7 @@ def register_delivery(delivery_id, event_name, repo_full_name):
                 "receivedAt": received_at,
                 "status": "RECEIVED",
                 "findingCount": 0,
+                "scanAttemptCount": 0,
                 "expiresAt": _expiry_timestamp(),
             },
             ConditionExpression="attribute_not_exists(deliveryId)",
@@ -35,21 +36,27 @@ def register_delivery(delivery_id, event_name, repo_full_name):
         raise
 
 
-def update_delivery_status(delivery_id, status, finding_count=0, note=""):
+def update_delivery_status(delivery_id, status, finding_count=0, note="", scan_attempt_count=None):
     table = table_resource(deliveries_table_name())
+    update_expression = (
+        "SET #status = :status, processedAt = :processed_at, "
+        "findingCount = :finding_count, statusNote = :status_note"
+    )
+    values = {
+        ":status": status,
+        ":processed_at": datetime.now(timezone.utc).isoformat(),
+        ":finding_count": finding_count,
+        ":status_note": note,
+    }
+    if scan_attempt_count is not None:
+        update_expression += ", scanAttemptCount = :scan_attempt_count"
+        values[":scan_attempt_count"] = scan_attempt_count
+
     table.update_item(
         Key={"deliveryId": delivery_id},
-        UpdateExpression=(
-            "SET #status = :status, processedAt = :processed_at, "
-            "findingCount = :finding_count, statusNote = :status_note"
-        ),
+        UpdateExpression=update_expression,
         ExpressionAttributeNames={"#status": "status"},
-        ExpressionAttributeValues={
-            ":status": status,
-            ":processed_at": datetime.now(timezone.utc).isoformat(),
-            ":finding_count": finding_count,
-            ":status_note": note,
-        },
+        ExpressionAttributeValues=values,
     )
 
 
@@ -74,3 +81,8 @@ def attach_delivery_context(delivery_id, payload_s3_key, branch="", compare_url=
 def delete_delivery(delivery_id):
     table = table_resource(deliveries_table_name())
     table.delete_item(Key={"deliveryId": delivery_id})
+
+
+def get_delivery(delivery_id):
+    table = table_resource(deliveries_table_name())
+    return table.get_item(Key={"deliveryId": delivery_id}).get("Item")

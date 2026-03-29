@@ -197,7 +197,7 @@ def _maybe_auto_disable(table, item):
     return deserialize_item(updated)
 
 
-def _process_delivery(message):
+def _process_delivery(message, attempt_count):
     delivery_id = message["deliveryId"]
     payload_key = message["payloadS3Key"]
     payload = _load_payload(payload_key)
@@ -208,6 +208,7 @@ def _process_delivery(message):
         "SCANNING",
         0,
         "LeakGuard worker started scanning this GitHub delivery.",
+        scan_attempt_count=attempt_count,
     )
 
     diff_result = fetch_compare_diff(payload)
@@ -220,6 +221,7 @@ def _process_delivery(message):
             "SCAN_FAILED",
             0,
             f"LeakGuard could not load a diff for scanning. Source={diff_result['source']}. {diff_result['error']}",
+            scan_attempt_count=attempt_count,
         )
         return
 
@@ -229,6 +231,7 @@ def _process_delivery(message):
             "PROCESSED_NO_FINDINGS",
             0,
             f"No leaked AWS access key IDs detected in this delivery. Diff source={diff_result['source']}.",
+            scan_attempt_count=attempt_count,
         )
         return
 
@@ -252,6 +255,7 @@ def _process_delivery(message):
         "FINDINGS_CREATED",
         len(stored),
         f"LeakGuard stored findings for this GitHub push delivery. Diff source={diff_result['source']}.",
+        scan_attempt_count=attempt_count,
     )
 
 
@@ -259,14 +263,16 @@ def lambda_handler(event, context):
     records = event.get("Records", [])
     for record in records:
         message = json.loads(record["body"])
+        attempt_count = int((record.get("attributes") or {}).get("ApproximateReceiveCount", "1"))
         try:
-            _process_delivery(message)
+            _process_delivery(message, attempt_count)
         except Exception as exc:
             update_delivery_status(
                 message["deliveryId"],
                 "SCAN_FAILED",
                 0,
                 f"LeakGuard worker failed: {str(exc)[:240]}",
+                scan_attempt_count=attempt_count,
             )
             raise
 

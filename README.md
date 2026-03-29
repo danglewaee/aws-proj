@@ -151,11 +151,12 @@ Each finding tracks:
 - `DISABLE_ALLOWLIST_USERS` can restrict which IAM users are eligible for key disable
 - `AlertEmailEndpoint` creates an SNS email subscription and enables per-finding alert publishing
 - the operator console now includes a delivery audit view so the same GitHub delivery can be inspected before or after finding creation
+- failed scan deliveries move through an SQS dead-letter queue and can be re-queued from the delivery audit view
 - the current detector intentionally focuses on one high-confidence pattern: long-term AWS access key IDs
 
 ## Next high-value steps
 
-1. Add a dead-letter queue and replay path for failed scans
-2. Complete the real GitHub webhook loop with a configured webhook secret and compare API token
+1. Complete the real GitHub webhook loop with a configured webhook secret and compare API token
+2. Add CloudWatch alarms and retention defaults that make free-tier guardrails visible
 3. Add a second notification channel only after SNS email stays low-noise
 4. Add a second detector for short-lived cloud credentials only after the AWS key flow is rock solid

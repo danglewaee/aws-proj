@@ -89,7 +89,7 @@ function renderDeliveries() {
         row.className = "event-row";
         row.innerHTML = `
             <div class="event-title">${item.deliveryId} <span class="pill">${item.status || "UNKNOWN"}</span></div>
-            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.eventName || "unknown event"} | findings ${item.findingCount || 0} | ${item.receivedAt || "-"}</div>
+            <div class="event-meta">${item.repoFullName || "unknown repo"} | ${item.eventName || "unknown event"} | findings ${item.findingCount || 0} | scans ${item.scanAttemptCount || 0} | ${item.receivedAt || "-"}</div>
             <button class="secondary" data-delivery-id="${item.deliveryId}">Inspect delivery</button>
         `;
         row.querySelector("button").addEventListener("click", () => loadDelivery(item.deliveryId));
@@ -129,6 +129,7 @@ function renderDeliveryDetail(payload) {
     const delivery = payload.delivery;
     state.selectedDeliveryId = delivery.deliveryId;
     state.selectedDelivery = delivery;
+    const retryEligible = Boolean(delivery.retryEligible);
 
     byId("deliveryDetailStatus").textContent = delivery.status || "UNKNOWN";
     byId("detailDeliveryAuditId").textContent = delivery.deliveryId || "-";
@@ -138,6 +139,8 @@ function renderDeliveryDetail(payload) {
     byId("detailDeliveryReceivedAt").textContent = delivery.receivedAt || "-";
     byId("detailDeliveryProcessedAt").textContent = delivery.processedAt || "-";
     byId("detailDeliveryFindingCount").textContent = `${delivery.findingCount || 0}`;
+    byId("detailDeliveryScanAttempts").textContent = `${delivery.scanAttemptCount || 0}`;
+    byId("detailDeliveryRetryEligible").textContent = retryEligible ? "YES" : "NO";
     byId("detailDeliveryCompareUrl").textContent = delivery.compareUrl || "-";
     byId("deliveryStatusNoteView").textContent = delivery.statusNote || "No delivery note recorded.";
     byId("deliveryFindingsView").textContent = JSON.stringify(
@@ -152,6 +155,7 @@ function renderDeliveryDetail(payload) {
         2
     );
     byId("deliveryPayloadView").textContent = JSON.stringify(payload.payload || {}, null, 2);
+    byId("retryDelivery").disabled = !retryEligible;
 }
 
 async function apiFetch(path, options = {}) {
@@ -239,6 +243,30 @@ async function loadDelivery(deliveryId) {
     }
 }
 
+async function retryDelivery() {
+    if (!state.selectedDeliveryId) {
+        alert("Select a delivery first.");
+        return;
+    }
+    if (!state.selectedDelivery || !state.selectedDelivery.retryEligible) {
+        alert("This delivery is not retryable from its current status.");
+        return;
+    }
+
+    try {
+        await apiFetch(`/deliveries/${state.selectedDeliveryId}/retry`, {
+            method: "POST",
+            body: JSON.stringify({})
+        });
+        await wait(1400);
+        await loadDelivery(state.selectedDeliveryId);
+        await loadDeliveries();
+        await loadFindings();
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
 async function ingestSamplePush() {
     try {
         await apiFetch("/github/webhook", {
@@ -288,12 +316,14 @@ function saveBaseUrl() {
 
 function boot() {
     byId("apiBaseUrl").value = state.apiBaseUrl;
+    byId("retryDelivery").disabled = true;
     byId("saveBaseUrl").addEventListener("click", saveBaseUrl);
     byId("refreshFindings").addEventListener("click", loadFindings);
     byId("refreshDeliveries").addEventListener("click", loadDeliveries);
     byId("ingestSample").addEventListener("click", ingestSamplePush);
     byId("applyFilters").addEventListener("click", loadFindings);
     byId("applyDeliveryFilters").addEventListener("click", loadDeliveries);
+    byId("retryDelivery").addEventListener("click", retryDelivery);
     byId("disableKey").addEventListener("click", () => takeAction("DISABLE_KEY"));
     byId("dismissFinding").addEventListener("click", () => takeAction("DISMISS"));
 }

@@ -34,6 +34,7 @@ def lambda_handler(event, context):
         return not_found(f"Delivery {delivery_id} was not found.")
 
     delivery = deserialize_item(delivery)
+    delivery["retryEligible"] = delivery.get("status") in {"SCAN_FAILED", "DLQ_RECEIVED", "RETRY_QUEUED"}
 
     findings_table = table_resource(findings_table_name())
     findings_response = findings_table.scan(

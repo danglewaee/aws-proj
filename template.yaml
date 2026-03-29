@@ -75,6 +75,14 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       VisibilityTimeout: 60
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt LeakGuardScanDlq.Arn
+        maxReceiveCount: 3
+
+  LeakGuardScanDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
 
   LeakGuardAlertsTopic:
     Type: AWS::SNS::Topic
@@ -180,6 +188,23 @@ Resources:
             ScalingConfig:
               MaximumConcurrency: 2
 
+  ScanDlqRecorderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.scan_dlq_recorder.app.lambda_handler
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !GetAtt LeakGuardScanDlq.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookDeliveriesTable
+      Events:
+        ScanDlqEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt LeakGuardScanDlq.Arn
+            BatchSize: 5
+
   ListEventsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -250,6 +275,24 @@ Resources:
             Method: GET
             Path: /deliveries/{deliveryId}
 
+  RetryDeliveryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.retry_delivery.app.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookDeliveriesTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt LeakGuardScanQueue.QueueName
+      Events:
+        RetryDelivery:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LeakGuardApi
+            Method: POST
+            Path: /deliveries/{deliveryId}/retry
+
   ReplayFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -293,6 +336,10 @@ Outputs:
   ScanQueueUrl:
     Description: SQS queue used to decouple webhook ingress from diff scanning.
     Value: !Ref LeakGuardScanQueue
+
+  ScanDlqUrl:
+    Description: Dead-letter queue used for deliveries that exceed scan retry limits.
+    Value: !Ref LeakGuardScanDlq
 
   AlertTopicArn:
     Description: SNS topic used for finding alerts.
