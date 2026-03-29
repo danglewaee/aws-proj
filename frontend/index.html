@@ -28,6 +28,7 @@
         </div>
     </header>
 
+    <div class="stack">
     <main class="grid">
         <section class="panel">
             <div class="panel-header">
@@ -157,6 +158,93 @@
             </div>
         </section>
     </main>
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="section-label">Audit</p>
+                <h2>Deliveries</h2>
+            </div>
+            <div class="hero-actions">
+                <button id="refreshDeliveries" class="secondary">Refresh deliveries</button>
+                <span class="pill" id="deliveryCount">0 loaded</span>
+            </div>
+        </div>
+
+        <div class="grid">
+            <section>
+                <div class="filters">
+                    <input id="deliveryStatusFilter" type="text" placeholder="status: QUEUED_FOR_SCAN">
+                    <input id="deliveryRepoFilter" type="text" placeholder="repo: acme/demo-repo">
+                    <button id="applyDeliveryFilters" class="secondary">Apply delivery filters</button>
+                </div>
+
+                <div class="event-list" id="deliveryList">
+                    <p class="empty">No GitHub deliveries loaded yet.</p>
+                </div>
+            </section>
+
+            <section class="detail-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="section-label">Delivery detail</p>
+                        <h2>Selected delivery</h2>
+                    </div>
+                    <span class="pill" id="deliveryDetailStatus">None</span>
+                </div>
+
+                <div class="detail-grid">
+                    <article class="detail-card">
+                        <span class="detail-label">Delivery ID</span>
+                        <strong id="detailDeliveryAuditId">Select a delivery</strong>
+                    </article>
+                    <article class="detail-card">
+                        <span class="detail-label">Event</span>
+                        <strong id="detailDeliveryEvent">-</strong>
+                    </article>
+                    <article class="detail-card">
+                        <span class="detail-label">Repository</span>
+                        <strong id="detailDeliveryRepo">-</strong>
+                    </article>
+                    <article class="detail-card">
+                        <span class="detail-label">Branch</span>
+                        <strong id="detailDeliveryBranch">-</strong>
+                    </article>
+                    <article class="detail-card">
+                        <span class="detail-label">Received at</span>
+                        <strong id="detailDeliveryReceivedAt">-</strong>
+                    </article>
+                    <article class="detail-card">
+                        <span class="detail-label">Processed at</span>
+                        <strong id="detailDeliveryProcessedAt">-</strong>
+                    </article>
+                    <article class="detail-card">
+                        <span class="detail-label">Finding count</span>
+                        <strong id="detailDeliveryFindingCount">-</strong>
+                    </article>
+                    <article class="detail-card">
+                        <span class="detail-label">Compare URL</span>
+                        <strong id="detailDeliveryCompareUrl">-</strong>
+                    </article>
+                </div>
+
+                <div class="payload-panel">
+                    <p class="section-label">Status note</p>
+                    <pre id="deliveryStatusNoteView">No delivery selected.</pre>
+                </div>
+
+                <div class="payload-panel">
+                    <p class="section-label">Linked findings</p>
+                    <pre id="deliveryFindingsView">No linked findings loaded yet.</pre>
+                </div>
+
+                <div class="payload-panel">
+                    <p class="section-label">Delivery payload</p>
+                    <pre id="deliveryPayloadView">Select a delivery to inspect its archived payload.</pre>
+                </div>
+            </section>
+        </div>
+    </section>
+    </div>
 </div>
 
 <script src="./config.js"></script>
