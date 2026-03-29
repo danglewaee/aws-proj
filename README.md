@@ -46,6 +46,8 @@ This project treats that as a very small response workflow:
 - expose:
   - `GET /findings`
   - `GET /findings/{findingId}`
+  - `GET /deliveries`
+  - `GET /deliveries/{deliveryId}`
   - `POST /findings/{findingId}/action`
 - support finding statuses:
   - `OPEN`
@@ -148,11 +150,12 @@ Each finding tracks:
 - disable is manual, opt-in, and requires explicit confirmation in the console
 - `DISABLE_ALLOWLIST_USERS` can restrict which IAM users are eligible for key disable
 - `AlertEmailEndpoint` creates an SNS email subscription and enables per-finding alert publishing
+- the operator console now includes a delivery audit view so the same GitHub delivery can be inspected before or after finding creation
 - the current detector intentionally focuses on one high-confidence pattern: long-term AWS access key IDs
 
 ## Next high-value steps
 
-1. Add delivery-level audit search so one operator can review what the same GitHub webhook triggered over time
-2. Add a dead-letter queue and replay path for failed scans
+1. Add a dead-letter queue and replay path for failed scans
+2. Complete the real GitHub webhook loop with a configured webhook secret and compare API token
 3. Add a second notification channel only after SNS email stays low-noise
 4. Add a second detector for short-lived cloud credentials only after the AWS key flow is rock solid

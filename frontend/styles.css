@@ -41,6 +41,11 @@ button {
     padding: 2rem 0 3rem;
 }
 
+.stack {
+    display: grid;
+    gap: 1rem;
+}
+
 .hero {
     display: grid;
     gap: 1rem;

@@ -53,6 +53,24 @@ def update_delivery_status(delivery_id, status, finding_count=0, note=""):
     )
 
 
+def attach_delivery_context(delivery_id, payload_s3_key, branch="", compare_url="", before_sha="", after_sha=""):
+    table = table_resource(deliveries_table_name())
+    table.update_item(
+        Key={"deliveryId": delivery_id},
+        UpdateExpression=(
+            "SET payloadS3Key = :payload_s3_key, branch = :branch, compareUrl = :compare_url, "
+            "beforeSha = :before_sha, afterSha = :after_sha"
+        ),
+        ExpressionAttributeValues={
+            ":payload_s3_key": payload_s3_key,
+            ":branch": branch,
+            ":compare_url": compare_url,
+            ":before_sha": before_sha,
+            ":after_sha": after_sha,
+        },
+    )
+
+
 def delete_delivery(delivery_id):
     table = table_resource(deliveries_table_name())
     table.delete_item(Key={"deliveryId": delivery_id})

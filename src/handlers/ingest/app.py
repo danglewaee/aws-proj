@@ -8,7 +8,12 @@ from shared.config import (
     evidence_bucket_name,
     github_webhook_secret,
 )
-from shared.deliveries import delete_delivery, register_delivery, update_delivery_status
+from shared.deliveries import (
+    attach_delivery_context,
+    delete_delivery,
+    register_delivery,
+    update_delivery_status,
+)
 from shared.github_diff import raw_payload_bytes, summarize_compare_window
 from shared.http import bad_request, json_response, unauthorized
 from shared.queue import enqueue_scan_job
@@ -104,6 +109,14 @@ def lambda_handler(event, context):
     try:
         repo_name = compare_summary["repoFullName"].replace("/", "__")
         payload_key = _archive_delivery_payload(repo_name, delivery_id, payload)
+        attach_delivery_context(
+            delivery_id,
+            payload_key,
+            branch=compare_summary["branch"] or "",
+            compare_url=compare_summary["compareUrl"] or "",
+            before_sha=compare_summary["before"] or "",
+            after_sha=compare_summary["after"] or "",
+        )
         enqueue_scan_job(
             {
                 "deliveryId": delivery_id,

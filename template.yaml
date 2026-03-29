@@ -196,6 +196,22 @@ Resources:
             Method: GET
             Path: /findings
 
+  ListDeliveriesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.list_deliveries.app.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref WebhookDeliveriesTable
+      Events:
+        ListDeliveries:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LeakGuardApi
+            Method: GET
+            Path: /deliveries
+
   GetEventFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -213,6 +229,26 @@ Resources:
             ApiId: !Ref LeakGuardApi
             Method: GET
             Path: /findings/{findingId}
+
+  GetDeliveryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.get_delivery.app.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref WebhookDeliveriesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref LeakFindingsTable
+        - S3ReadPolicy:
+            BucketName: !Ref EvidenceBucket
+      Events:
+        GetDelivery:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LeakGuardApi
+            Method: GET
+            Path: /deliveries/{deliveryId}
 
   ReplayFunction:
     Type: AWS::Serverless::Function
