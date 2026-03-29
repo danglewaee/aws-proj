@@ -33,6 +33,14 @@ def alert_topic_arn():
     return os.environ.get("ALERT_TOPIC_ARN", "")
 
 
+def auto_disable_mode():
+    return os.environ.get("AUTO_DISABLE_MODE", "OFF").strip().upper() or "OFF"
+
+
+def auto_disable_enabled():
+    return auto_disable_mode() != "OFF"
+
+
 def delivery_ttl_days():
     return int(os.environ.get("DELIVERY_TTL_DAYS", "14"))
 
