@@ -5,6 +5,7 @@ from shared.config import disable_allowlist_users, evidence_bucket_name, finding
 from shared.dynamo import deserialize_item, table_resource
 from shared.http import bad_request, not_found, json_response
 from shared.iam_keys import disable_access_key
+from shared.operator_auth import require_operator_auth
 from shared.storage import s3_client
 
 
@@ -12,6 +13,10 @@ def lambda_handler(event, context):
     finding_id = (event.get("pathParameters") or {}).get("findingId")
     if not finding_id:
         return not_found("Finding id was not provided.")
+
+    operator_id, auth_error = require_operator_auth(event)
+    if auth_error:
+        return auth_error
 
     body = json.loads(event.get("body") or "{}")
     action = (body.get("action") or "").upper()
@@ -53,6 +58,7 @@ def lambda_handler(event, context):
             "actedAt": acted_at,
             "note": note,
             "confirmed": confirmed,
+            "actorId": operator_id,
         }
     )
 
@@ -67,6 +73,7 @@ def lambda_handler(event, context):
                 "note": note,
                 "confirmed": confirmed,
                 "actedAt": acted_at,
+                "actorId": operator_id,
             }
         ).encode("utf-8"),
         ContentType="application/json",

@@ -1,9 +1,13 @@
 const configuredBaseUrl =
     (window.LEAK_GUARD_CONFIG && window.LEAK_GUARD_CONFIG.apiBaseUrl) || "";
 const savedBaseUrl = localStorage.getItem("leak-guard-api-base-url") || configuredBaseUrl;
+const savedOperatorId = localStorage.getItem("leak-guard-operator-id") || "";
+const savedOperatorToken = localStorage.getItem("leak-guard-operator-token") || "";
 
 const state = {
     apiBaseUrl: savedBaseUrl,
+    operatorId: savedOperatorId,
+    operatorToken: savedOperatorToken,
     selectedFindingId: null,
     selectedFinding: null,
     findings: [],
@@ -189,9 +193,19 @@ async function apiFetch(path, options = {}) {
         throw new Error("Set an API base URL first.");
     }
 
+    const method = (options.method || "GET").toUpperCase();
+    const authHeaders = {};
+    if (state.operatorId) {
+        authHeaders["x-operator-id"] = state.operatorId;
+    }
+    if (state.operatorToken && method !== "GET") {
+        authHeaders["x-operator-token"] = state.operatorToken;
+    }
+
     const response = await fetch(`${baseUrl}${path}`, {
         headers: {
             "content-type": "application/json",
+            ...authHeaders,
             ...(options.headers || {})
         },
         ...options
@@ -348,11 +362,17 @@ async function takeAction(action) {
 
 function saveBaseUrl() {
     state.apiBaseUrl = byId("apiBaseUrl").value.trim();
+    state.operatorId = byId("operatorId").value.trim();
+    state.operatorToken = byId("operatorToken").value.trim();
     localStorage.setItem("leak-guard-api-base-url", state.apiBaseUrl);
+    localStorage.setItem("leak-guard-operator-id", state.operatorId);
+    localStorage.setItem("leak-guard-operator-token", state.operatorToken);
 }
 
 function boot() {
     byId("apiBaseUrl").value = state.apiBaseUrl;
+    byId("operatorId").value = state.operatorId;
+    byId("operatorToken").value = state.operatorToken;
     byId("retryDelivery").disabled = true;
     byId("saveBaseUrl").addEventListener("click", saveBaseUrl);
     byId("refreshMetrics").addEventListener("click", loadMetrics);

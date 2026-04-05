@@ -29,6 +29,10 @@ def github_token():
     return os.environ.get("GITHUB_TOKEN", "")
 
 
+def operator_action_token():
+    return os.environ.get("OPERATOR_ACTION_TOKEN", "")
+
+
 def alert_topic_arn():
     return os.environ.get("ALERT_TOPIC_ARN", "")
 

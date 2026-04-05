@@ -25,6 +25,11 @@ Parameters:
     Default: ""
     NoEcho: true
     Description: Optional GitHub token for Compare API calls. Leave blank to use demo inline diffs only.
+  OperatorActionToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional shared token required for retry and finding action endpoints.
   AutoDisableMode:
     Type: String
     Default: "OFF"
@@ -52,6 +57,7 @@ Globals:
         DELIVERY_TTL_DAYS: "14"
         GITHUB_WEBHOOK_SECRET: !Ref GitHubWebhookSecret
         GITHUB_TOKEN: !Ref GitHubToken
+        OPERATOR_ACTION_TOKEN: !Ref OperatorActionToken
         DISABLE_ALLOWLIST_USERS: ""
         AUTO_DISABLE_MODE: !Ref AutoDisableMode
         ALERT_TOPIC_ARN: !If [HasAlertEmailEndpoint, !Ref LeakGuardAlertsTopic, ""]

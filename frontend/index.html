@@ -20,8 +20,12 @@
         <div class="hero-card">
             <label for="apiBaseUrl">API base URL</label>
             <input id="apiBaseUrl" type="text" placeholder="https://your-api.execute-api.us-east-1.amazonaws.com">
+            <label for="operatorId">Operator ID</label>
+            <input id="operatorId" type="text" placeholder="security-oncall@company">
+            <label for="operatorToken">Operator token</label>
+            <input id="operatorToken" type="password" placeholder="Optional shared token for containment actions">
             <div class="hero-actions">
-                <button id="saveBaseUrl">Save URL</button>
+                <button id="saveBaseUrl">Save settings</button>
                 <button id="refreshFindings" class="secondary">Refresh findings</button>
                 <button id="ingestSample" class="secondary">Send sample push</button>
             </div>

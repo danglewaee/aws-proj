@@ -76,6 +76,8 @@ If `sam deploy --guided` asks for `AlertEmailEndpoint`, enter an email address t
 
 If `sam deploy --guided` asks for `GitHubWebhookSecret`, enter the webhook secret configured in your GitHub repository or organization. If it asks for `GitHubToken`, enter a GitHub token with permission to call the compare API for the target repository. With a token configured, LeakGuard treats the GitHub compare API as the primary diff source and only falls back to `inlineDiff` when the compare request fails.
 
+If `sam deploy --guided` asks for `OperatorActionToken`, leave it blank to keep local demo behavior. Set it when you want `retry` and `finding action` endpoints to require a shared operator token.
+
 If `sam deploy --guided` asks for `AutoDisableMode`, leave it as `OFF` for a detect-only deployment. Set it to `ALLOWLIST_HIGH_CONFIDENCE` only when you want LeakGuard to auto-disable verified leaked keys for IAM users that also pass the configured disable allowlist.
 
 If `sam deploy --guided` asks for `LogRetentionDays`, leave it at `14` unless you explicitly want shorter or longer CloudWatch retention for the Lambda log groups.
@@ -187,6 +189,7 @@ Each finding tracks:
 - findings record `diffSource` so operators can see whether a case came from a real compare API fetch or a demo fallback
 - containment is opt-in: `AutoDisableMode=ALLOWLIST_HIGH_CONFIDENCE` only auto-disables verified keys that also pass the current disable allowlist
 - disable is manual, opt-in, and requires explicit confirmation in the console
+- retry and containment endpoints can require an operator token; action history records the operator ID for manual dismiss, disable, and retry actions
 - `DISABLE_ALLOWLIST_USERS` can restrict which IAM users are eligible for key disable
 - `AlertEmailEndpoint` creates an SNS email subscription and enables per-finding alert publishing
 - the operator console now includes a delivery audit view so the same GitHub delivery can be inspected before or after finding creation
