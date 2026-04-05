@@ -48,6 +48,7 @@ This project treats that as a very small response workflow:
   - `GET /findings/{findingId}`
   - `GET /deliveries`
   - `GET /deliveries/{deliveryId}`
+  - `GET /metrics/summary`
   - `POST /findings/{findingId}/action`
 - support finding statuses:
   - `OPEN`
@@ -142,6 +143,14 @@ When a real push succeeds, LeakGuard should create:
 - one or more findings with `Diff source = GITHUB_COMPARE_API`
 - optional SNS alerting if `AlertEmailEndpoint` is configured and confirmed
 
+### 7. Run the detector evaluation harness
+
+```powershell
+python .\scripts\evaluate-detector.py
+```
+
+This evaluates the current AWS access key detector against a small regression corpus in `events/evaluation-cases.json`.
+
 ## Finding model
 
 Each finding tracks:
@@ -184,6 +193,8 @@ Each finding tracks:
 - failed scan deliveries move through an SQS dead-letter queue and can be re-queued from the delivery audit view
 - each Lambda log group is created with an explicit retention window instead of defaulting to indefinite CloudWatch storage
 - CloudWatch alarms now surface scan worker errors and deliveries that accumulate in the scan DLQ
+- `GET /metrics/summary` provides delivery, finding, retry, diff source, and latency snapshot metrics for the hosted console
+- the repository includes a small detector regression harness and evaluation doc for measuring exact-match behavior on the first supported secret type
 - the current detector intentionally focuses on one high-confidence pattern: long-term AWS access key IDs
 
 ## Next high-value steps

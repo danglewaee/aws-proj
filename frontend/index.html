@@ -29,6 +29,58 @@
     </header>
 
     <div class="stack">
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="section-label">Measured behavior</p>
+                <h2>System snapshot</h2>
+            </div>
+            <div class="hero-actions">
+                <button id="refreshMetrics" class="secondary">Refresh metrics</button>
+                <span class="pill" id="metricsLoadedStatus">No data</span>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <article class="detail-card metric-card">
+                <span class="detail-label">Deliveries</span>
+                <strong id="metricDeliveryTotal">-</strong>
+            </article>
+            <article class="detail-card metric-card">
+                <span class="detail-label">Findings</span>
+                <strong id="metricFindingTotal">-</strong>
+            </article>
+            <article class="detail-card metric-card">
+                <span class="detail-label">Open findings</span>
+                <strong id="metricOpenFindings">-</strong>
+            </article>
+            <article class="detail-card metric-card">
+                <span class="detail-label">Alerts published</span>
+                <strong id="metricAlertsPublished">-</strong>
+            </article>
+            <article class="detail-card metric-card">
+                <span class="detail-label">Auto-disabled</span>
+                <strong id="metricAutoDisabled">-</strong>
+            </article>
+            <article class="detail-card metric-card">
+                <span class="detail-label">Retryable deliveries</span>
+                <strong id="metricRetryableDeliveries">-</strong>
+            </article>
+            <article class="detail-card metric-card">
+                <span class="detail-label">Time to finding p50</span>
+                <strong id="metricTimeToFindingP50">-</strong>
+            </article>
+            <article class="detail-card metric-card">
+                <span class="detail-label">Time to finding p95</span>
+                <strong id="metricTimeToFindingP95">-</strong>
+            </article>
+        </div>
+
+        <div class="payload-panel">
+            <p class="section-label">Metric breakdown</p>
+            <pre id="metricsBreakdownView">No metrics loaded yet.</pre>
+        </div>
+    </section>
     <main class="grid">
         <section class="panel">
             <div class="panel-header">

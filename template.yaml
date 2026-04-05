@@ -255,6 +255,12 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/${GetDeliveryFunction}"
       RetentionInDays: !Ref LogRetentionDays
 
+  MetricsSummaryFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${MetricsSummaryFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
   RetryDeliveryFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -376,6 +382,24 @@ Resources:
             ApiId: !Ref LeakGuardApi
             Method: GET
             Path: /deliveries/{deliveryId}
+
+  MetricsSummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers.metrics_summary.app.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref WebhookDeliveriesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref LeakFindingsTable
+      Events:
+        MetricsSummary:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LeakGuardApi
+            Method: GET
+            Path: /metrics/summary
 
   RetryDeliveryFunction:
     Type: AWS::Serverless::Function

@@ -188,9 +188,19 @@ button.secondary {
     margin: 1rem 0;
 }
 
+.metrics-grid {
+    display: grid;
+    gap: 0.8rem;
+}
+
 .detail-card {
     padding: 0.9rem 1rem;
     background: var(--panel-strong);
+}
+
+.metric-card strong {
+    font-size: 1.45rem;
+    line-height: 1.1;
 }
 
 .detail-label {
@@ -231,5 +241,9 @@ pre {
 
     .detail-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .metrics-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }

@@ -9,7 +9,8 @@ const state = {
     findings: [],
     selectedDeliveryId: null,
     selectedDelivery: null,
-    deliveries: []
+    deliveries: [],
+    metrics: null
 };
 const sampleDeliveryId = (window.crypto && window.crypto.randomUUID)
     ? `sample-${window.crypto.randomUUID()}`
@@ -45,6 +46,30 @@ function wait(ms) {
     return new Promise((resolve) => {
         window.setTimeout(resolve, ms);
     });
+}
+
+function formatMetricMs(value) {
+    if (value === null || value === undefined) {
+        return "-";
+    }
+    if (value < 1000) {
+        return `${value} ms`;
+    }
+    return `${(value / 1000).toFixed(2)} s`;
+}
+
+function renderMetrics(payload) {
+    state.metrics = payload;
+    byId("metricsLoadedStatus").textContent = "Loaded";
+    byId("metricDeliveryTotal").textContent = `${payload.deliveries.total}`;
+    byId("metricFindingTotal").textContent = `${payload.findings.total}`;
+    byId("metricOpenFindings").textContent = `${payload.findings.open}`;
+    byId("metricAlertsPublished").textContent = `${payload.findings.alertsPublished}`;
+    byId("metricAutoDisabled").textContent = `${payload.findings.autoDisabled}`;
+    byId("metricRetryableDeliveries").textContent = `${payload.deliveries.retryEligible}`;
+    byId("metricTimeToFindingP50").textContent = formatMetricMs(payload.performance.timeToFindingMs.p50);
+    byId("metricTimeToFindingP95").textContent = formatMetricMs(payload.performance.timeToFindingMs.p95);
+    byId("metricsBreakdownView").textContent = JSON.stringify(payload, null, 2);
 }
 
 function renderFindings() {
@@ -225,6 +250,15 @@ async function loadDeliveries() {
     }
 }
 
+async function loadMetrics() {
+    try {
+        const data = await apiFetch("/metrics/summary");
+        renderMetrics(data);
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
 async function loadFinding(findingId) {
     try {
         const data = await apiFetch(`/findings/${findingId}`);
@@ -262,6 +296,7 @@ async function retryDelivery() {
         await loadDelivery(state.selectedDeliveryId);
         await loadDeliveries();
         await loadFindings();
+        await loadMetrics();
     } catch (error) {
         alert(error.message);
     }
@@ -280,6 +315,7 @@ async function ingestSamplePush() {
         await wait(1200);
         await loadFindings();
         await loadDeliveries();
+        await loadMetrics();
     } catch (error) {
         alert(error.message);
     }
@@ -304,6 +340,7 @@ async function takeAction(action) {
         });
         await loadFinding(state.selectedFindingId);
         await loadFindings();
+        await loadMetrics();
     } catch (error) {
         alert(error.message);
     }
@@ -318,6 +355,7 @@ function boot() {
     byId("apiBaseUrl").value = state.apiBaseUrl;
     byId("retryDelivery").disabled = true;
     byId("saveBaseUrl").addEventListener("click", saveBaseUrl);
+    byId("refreshMetrics").addEventListener("click", loadMetrics);
     byId("refreshFindings").addEventListener("click", loadFindings);
     byId("refreshDeliveries").addEventListener("click", loadDeliveries);
     byId("ingestSample").addEventListener("click", ingestSamplePush);

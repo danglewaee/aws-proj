@@ -1,0 +1,32 @@
+[
+  {
+    "name": "single_valid_added_key",
+    "expectedFindingCount": 1,
+    "diffText": "diff --git a/app.py b/app.py\nindex 111..222 100644\n--- a/app.py\n+++ b/app.py\n@@ -1,1 +1,2 @@\n+AWS_ACCESS_KEY_ID = \"AKIAIOSFODNN7EXAMPLE\""
+  },
+  {
+    "name": "two_valid_added_keys",
+    "expectedFindingCount": 2,
+    "diffText": "diff --git a/secrets.env b/secrets.env\nindex 111..222 100644\n--- a/secrets.env\n+++ b/secrets.env\n@@ -1,1 +1,3 @@\n+PRIMARY_KEY=AKIAIOSFODNN7EXAMPLE\n+SECONDARY_KEY=AKIAZZZZZZZZZZZZZZZZ"
+  },
+  {
+    "name": "removed_key_should_not_trigger",
+    "expectedFindingCount": 0,
+    "diffText": "diff --git a/app.py b/app.py\nindex 111..222 100644\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,1 @@\n-AWS_ACCESS_KEY_ID = \"AKIAIOSFODNN7EXAMPLE\""
+  },
+  {
+    "name": "context_line_should_not_trigger",
+    "expectedFindingCount": 0,
+    "diffText": "diff --git a/app.py b/app.py\nindex 111..222 100644\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,2 @@\n AWS_ACCESS_KEY_ID = \"AKIAIOSFODNN7EXAMPLE\""
+  },
+  {
+    "name": "near_miss_should_not_trigger",
+    "expectedFindingCount": 0,
+    "diffText": "diff --git a/app.py b/app.py\nindex 111..222 100644\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,2 @@\n+AWS_ACCESS_KEY_ID = \"AKIA1234NOTAREALMATCH\""
+  },
+  {
+    "name": "non_aws_secret_should_not_trigger",
+    "expectedFindingCount": 0,
+    "diffText": "diff --git a/app.py b/app.py\nindex 111..222 100644\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,2 @@\n+GITHUB_TOKEN = \"ghp_1234567890abcdefghijklmnopqrstuvwxyz\""
+  }
+]
